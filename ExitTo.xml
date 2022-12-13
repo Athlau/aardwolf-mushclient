@@ -70,6 +70,15 @@
    script="MazeTo"
   >
   </alias>
+  <alias
+   match="maze_to_noresume_once"
+   enabled="y"
+   expand_variables="y"
+   send_to="12"
+   sequence="100"
+   script="MazeToNoResumeOnce"
+  >
+  </alias>
 </aliases>
 
 <!--  Variables  -->
@@ -92,11 +101,19 @@ local target_maze_room = ""
 local solving_maze = false
 local timeout = 30
 local start_time = 0
+local maze_to_no_resume_once = false
 
 help_message = [[
    In [19648] The Skullgore Plain, mapper cexit wait(0.5);;maze_to 19652;;wait(30)
    In [19652] The Skullgore Plain, mapper cexit exit_to The Dark Path;;wait(0.1)
+   Note: before adding cexit in mapper, use maze_to_no_resume_once so that it doesn't
+         auto resume when hitting target room
 ]]
+
+function MazeToNoResumeOnce(name, line, wildcards)
+  Note("not going to auto resume mapper goto command once")
+  maze_to_no_resume_once = true
+end
 
 function ExitTo(name, line, wildcards)
   target_exit  = wildcards[1]
@@ -134,7 +151,10 @@ function MazeToMoved(msg, id, name, text)
       Note("Arrived to target room "..tostring(target_maze_room))
       solving_maze = false
       EnableTriggerGroup("mazeto", 0)
-      Execute("mapper resume")
+      if not maze_to_no_resume_once then
+        Execute("mapper resume")
+      end
+      maze_to_no_resume_once = false
     else
       Note("in room "..roomid.." continuing")
       DoMove()
