@@ -357,6 +357,12 @@ end
 
 function tcGetTooltip()
   result = ""
+  for key, val in pairs(tc_options.mouse_actions) do
+    if result ~= "" then
+      result = result.."\n"
+    end
+    result = result..key.." click => "..val
+  end
   return result
 end
 
