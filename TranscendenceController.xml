@@ -36,8 +36,13 @@ TC commands:
               set mouse_actions ctrl+alt+shift+middle clear
     tc_options set style xx_border_color 13158600 - change cell outline color for rooms with XX mobs to white
       - Note: use "LUA" value from mush client color picker (ctrl+alt+P) tool to get the color you want
+  tc_options reset - reset options to defaults
   tc_on - enable controller auto functions
   tc_off - disable controller auto functions
+  tc_gt - tells to group chat prepending group_tell_prefix from options
+  tc_observe <room>- observe given room and capture output, tc_observe a1
+  tc_report_bad <channel> <room> - report bad mobs in given room, tc_report_bad tc_gt a1
+  tc_report_players <channel> <room> - report players health in given room, tc_report_players echo a1
   tc_test - show miniwindow with test data capture
 ]]>
 </description>
@@ -64,6 +69,33 @@ TC commands:
   >
   </alias>
 
+  <alias
+   script="tcOnObserveCmd"
+   match="^tc_observe (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="tcOnReportBadCmd"
+   match="^tc_report_bad (?<channel>\w+) (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="tcOnReportPlayersCmd"
+   match="^tc_report_players (?<channel>\w+) (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
   <alias
    script="tcOnShowCmd"
    match="tc_show"
@@ -92,8 +124,28 @@ TC commands:
   </alias>
 
   <alias
+   script="tcOnGtCmd"
+   match="^tc_gt(?<message>.+)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
    script="tcOnOptionsCmd"
    match="^tc_options(?: set (?<key1>[^\s]+) (?<key2>[^\s]+) (?<value>.+)|)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias> 
+
+  <alias
+   script="tcOnOptionsResetCmd"
+   match="^tc_options reset$"
    regexp="y"
    enabled="y"
    send_to="12"
@@ -182,6 +234,72 @@ TC commands:
   >
   <send></send>
   </trigger>
+  <trigger
+   enabled="n"
+   group="wait_for_observe_start"
+   keep_evaluating="y"
+   match="^tc_observe_start$"
+   regexp="y"
+   script="tcHandleObserveStart"
+   sequence="2"
+   omit_from_output="y"
+  >
+  </trigger>
+  <trigger
+   enabled="n"
+   group="capture_observe"
+   keep_evaluating="y"
+   match="^An Angelic (?<name>\w+) \[(?<hp>\d+)%\] is (?:standing there\.|fighting \w+ .*)$"
+   regexp="y"
+   script="tcHandleObserveEnemyLine"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
+  <trigger
+   enabled="n"
+   group="capture_observe"
+   keep_evaluating="y"
+   match="^An Archangel (?<name>Commander) \[(?<hp>\d+)%\] is (?:standing there\.|fighting \w+ .*)$"
+   regexp="y"
+   script="tcHandleObserveEnemyLine"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
+  <trigger
+   enabled="n"
+   group="capture_observe"
+   keep_evaluating="y"
+   match="^A (?<name>Seraph) \[(?<hp>\d+)%\] is (?:standing there\.|fighting \w+ .*)$"
+   regexp="y"
+   script="tcHandleObserveEnemyLine"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
+  <trigger
+   enabled="n"
+   group="capture_observe"
+   keep_evaluating="y"
+   match="^(?<name>\w+) \[(?<hp>\d+)%\] is (?:standing there\.|fighting \w+ .*)$"
+   regexp="y"
+   script="tcHandleObservePlayerLine"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
+  <trigger
+   enabled="n"
+   group="capture_observe"
+   keep_evaluating="y"
+   match="^tc_observe_end$"
+   regexp="y"
+   script="tcHandleObserveEnd"
+   sequence="2"
+   omit_from_output="y"
+  >
+  </trigger>
 </triggers>
 
 <!--  Script  -->
@@ -192,6 +310,7 @@ require "var"
 require "serialize"
 require "themed_miniwindows"
 require "tprint"
+require "copytable"
 
 local tc_options = {}
 local map = {}
@@ -230,25 +349,29 @@ function tcGetDefaultOptions()
       bold = true,
     },
     mouse_actions = {
-      ["right"] = "echo observe",
-      ["shift+right"] = "echo report bad",
-      ["middle"] = "echo advance",
-      ["left"] = "echo say acid",
-      ["shift+left"] = "echo say water",
-      ["alt+left"] = "echo say lightning",
+      ["right"] = "tc_observe",
+      ["shift+right"] = "tc_report_bad tc_gt",
+      ["alt+right"] = "tc_report_players tc_gt",
+      ["middle"] = "tc_gt advance",
+      ["left"] = "say acid",
+      ["shift+left"] = "say water",
+      ["alt+left"] = "say lightning",
+    },
+    misc = {
+      group_tell_prefix = "@w[@BE@RP@GI@YC @RTC@w] =>@Y",
     },
   }
   return default_options
 end
 
 function tcCheckOptions()
-  -- Do nothing for now
+  if tc_options.misc == nil then
+    tc_options[misc][group_tell_prefix] = tcGetDefaultOptions().misc.group_tell_prefix
+  end
 end
 
 function tcLoadOptions()
   tc_options = loadstring(string.format("return %s", var.config or serialize.save_simple(tcGetDefaultOptions())))()
-  -- TEMP
-  -- tc_options = loadstring(string.format("return %s", serialize.save_simple(tcGetDefaultOptions())))()
   tcCheckOptions()
   tcSaveOptions()
 end
@@ -294,6 +417,104 @@ function tcHandleMapEnd(name, line, wildcards)
   tcWindowRedraw()
 end
 
+------ Observe related code ------
+
+local tc_bad_mobs = {
+  ["Enchanter"] = "@REnchanter@Y",
+  ["Immolator"] = "@RImmolator@Y",
+  ["Commander"] = "@RCommander@Y",
+  ["Seraph"] = "@RSeraph@Y",
+  ["Vanquisher"] = "@RVanquisher@Y",
+}
+local tc_observed = {}
+local tc_observing = false
+local tc_col = nil
+local tc_row = nil
+
+function tcEcexuteObserveCmd(row, col)
+  if tc_observing then
+    Note("observe command queued already, ignoring")
+  end
+  tc_observing = true
+  tc_row = row
+  tc_col = col -- == "a" and 1 or (col == "b" and 2 or 3)
+  if tc_observed[tc_row] == nil then
+    tc_observed[tc_row] = {}
+  end
+  tc_observed[tc_row][tc_col] = {mobs={}, players={}}
+  EnableTriggerGroup("wait_for_observe_start", 1)
+  Send(echo tc_observe_start;observe;echo tc_observe_end)
+end
+
+function tcHandleObserveStart()
+  EnableTriggerGroup("wait_for_observe_start", 0)
+  EnableTriggerGroup("capture_observe", 1)
+  Note("start")
+end
+
+function tcHandleObserveEnd()
+  EnableTriggerGroup("capture_observe", 0)
+  tc_observing = false
+  Execute("tc_report_bad echo "..tc_col..tc_row)
+  Execute("tc_report_players echo "..tc_col..tc_row)
+end
+
+function tcHandleObserveEnemyLine(name, line, wildcards)
+  --Note("enemy "..wildcards.name.." "..wildcards.hp)
+  local t = {
+    name = wildcards.name,
+    hp = tonumber(wildcards.hp)
+  }
+  table.insert(tc_observed[tc_row][tc_col].mobs, t)
+end
+
+function tcHandleObservePlayerLine(name, line, wildcards)
+  --Note("player "..wildcards.name.." "..wildcards.hp)
+  local t = {
+    name = wildcards.name,
+    hp = tonumber(wildcards.hp)
+  }
+  table.insert(tc_observed[tc_row][tc_col].players, t)
+end
+
+function tcExecuteReportBad(channel, row, col)
+  if tc_observed[row] == nil or tc_observed[row][col] == nil then
+    Note("No data for "..col..row)
+    return
+  end
+
+  local message = ""
+  for i = 1, #tc_observed[row][col].mobs, 1 do
+    local name = tc_bad_mobs[tc_observed[row][col].mobs[i].name]
+    if name ~= nil then
+      if message ~= "" then message = message.." " end
+      message = message..name.."@W["..tc_observed[row][col].mobs[i].hp.."%]"
+    end
+  end
+  if message ~= "" then
+    message = message.." in @M"..col..row
+    Execute(channel.." "..message)
+  end
+end
+
+function tcExecuteReportPlayers(channel, row, col)
+  if tc_observed[row] == nil or tc_observed[row][col] == nil then
+    Note("No data for "..col..row)
+    return
+  end
+
+  local count = 0
+  local hp = 0
+  for i = 1, #tc_observed[row][col].players, 1 do
+    count = count + 1
+    hp = hp + tc_observed[row][col].players[i].hp
+  end
+
+  if count > 0 then
+    local message = "@G"..tostring(count).."@W players with average @G"..tonumber(hp/count).."@W% HP in @M"..col..row
+    Execute(channel.." "..message)
+  end
+end
 ------ Window functions ------
 
 function tcGetCellSize()
@@ -529,57 +750,87 @@ function tcOnOptionsCmd(name, line, wildcards)
   Note("TC Options:")
   if wildcards.key1 == "" then
     tprint(tc_options)
-  else
-    if tc_options[wildcards.key1] == nil then
-      Note("Warn: unknown option group "..wildcards.key1)
+    return
+  end
+
+  if tc_options[wildcards.key1] == nil then
+    Note("Warn: unknown option group "..wildcards.key1)
+    return
+  end
+  if wildcards.key1 == "mouse_actions" then
+    if tcNameToMouseFlags(wildcards.key2) == 0 then
+      Note("Warn: unknown mouse action "..wildcards.key2)
       return
     end
-    if wildcards.key1 == "mouse_actions" then
-      if tcNameToMouseFlags(wildcards.key2) == 0 then
-        Note("Warn: unknown mouse action "..wildcards.key2)
-        return
-      end
-    elseif tc_options[wildcards.key1][wildcards.key2] == nil then
-      Note("Warn: unknown option "..wildcards.key2)
-      return
+  elseif tc_options[wildcards.key1][wildcards.key2] == nil then
+    Note("Warn: unknown option "..wildcards.key2)
+    return
+  end
+
+  local type = wildcards.key1 == "mouse_actions" and "string" or type(tc_options[wildcards.key1][wildcards.key2])
+
+  if type == "boolean" then
+    local bool = wildcards.value == "true" and true or nil
+    if wildcards.value == "false" then
+      bool = false
     end
-
-    local type = wildcards.key1 == "mouse_actions" and "string" or type(tc_options[wildcards.key1][wildcards.key2])
-
-    if type == "boolean" then
-      local bool = wildcards.value == "true" and true or nil
-      if wildcards.value == "false" then
-        bool = false
-      end
-      if bool ~= nil then
-        tc_options[wildcards.key1][wildcards.key2] = bool
-        Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
-      else
-        Note(wildcards.value.." is not a valid boolean")
-      end
-    elseif type == "number" then
-      if tonumber(wildcards.value) ~= nil then
-        tc_options[wildcards.key1][wildcards.key2] = tonumber(wildcards.value)
-        Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
-      else
-        Note(wildcards.value.." is not a valid number")
-      end
-    elseif type == "string" then
-      if wildcards.key1 == "mouse_actions" and wildcards.value == "clear" then
-        wildcards.value = nil
-      end
-      tc_options[wildcards.key1][wildcards.key2] = wildcards.value
+    if bool ~= nil then
+      tc_options[wildcards.key1][wildcards.key2] = bool
+      tcSaveOptions()
       Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
+    else
+      Note(wildcards.value.." is not a valid boolean")
     end
-    if wildcards.key1 == "font" or wildcards.key1 == "style" or wildcards.key1 == "mouse_actions" then
-      if window then window:delete(false) end
-      tcShowWindow()
-    elseif wildcards.key1 == "auto_map" then
-      if tc_enabled then
-        tcOnOnCmd()
-      end
+  elseif type == "number" then
+    if tonumber(wildcards.value) ~= nil then
+      tc_options[wildcards.key1][wildcards.key2] = tonumber(wildcards.value)
+      tcSaveOptions()
+      Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
+    else
+      Note(wildcards.value.." is not a valid number")
+    end
+  elseif type == "string" then
+    if wildcards.key1 == "mouse_actions" and wildcards.value == "clear" then
+      wildcards.value = nil
+    end
+    tc_options[wildcards.key1][wildcards.key2] = wildcards.value
+    tcSaveOptions()
+    Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
+  else
+    Note("Warn: unexpected value type "..type)
+  end
+
+  if wildcards.key1 == "font" or wildcards.key1 == "style" or wildcards.key1 == "mouse_actions" then
+    if window then window:delete(false) end
+    tcShowWindow()
+  elseif wildcards.key1 == "auto_map" then
+    if tc_enabled then
+      tcOnOnCmd()
     end
   end
+end
+
+function tcOnOptionsResetCmd()
+  tc_options = copytable.deep(tcGetDefaultOptions())
+  tcSaveOptions()
+  if window then window:delete(false) end
+  tcShowWindow()
+end
+
+function tcOnGtCmd(name, line, wildcards)
+  Execute("gtell "..tc_options.misc.group_tell_prefix..wildcards.message)
+end
+
+function tcOnObserveCmd(name, line, wildcards)
+  tcEcexuteObserveCmd(wildcards.row, wildcards.col)
+end
+
+function tcOnReportBadCmd(name, line, wildcards)
+  tcExecuteReportBad(wildcards.channel, wildcards.row, wildcards.col)
+end
+
+function tcOnReportPlayersCmd(name, line, wildcards)
+  tcExecuteReportPlayers(wildcards.channel, wildcards.row, wildcards.col)
 end
 
 function tcOnTestCmd()
