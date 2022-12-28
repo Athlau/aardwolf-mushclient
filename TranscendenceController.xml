@@ -492,9 +492,9 @@ function tcNameToMouseFlags(name)
     result = result + (captures.ctrl and miniwin.hotspot_got_control or 0)
     result = result + (captures.alt and miniwin.hotspot_got_alt or 0)
     result = result + (captures.shift and miniwin.hotspot_got_shift or 0)
-    result = result + (captures.button == "left" and miniwin.hotspot_lh_mouse or 0)
-    result = result + (captures.button == "right" and miniwin.hotspot_rh_mouse or 0)
-    result = result + (captures.button == "middle" and miniwin.hotspot_middle_mouse or 0)
+    result = result + (captures.button == "left" and miniwin.hotspot_got_lh_mouse or 0)
+    result = result + (captures.button == "right" and miniwin.hotspot_got_rh_mouse or 0)
+    result = result + (captures.button == "middle" and miniwin.hotspot_got_middle_mouse or 0)
   else
     Note("Warn: incorrect mouse flags ["..name.."]")
   end
