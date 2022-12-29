@@ -30,7 +30,8 @@ TC commands:
     tc_options set font size 20 - set window font size to 20
     tc_options set mouse_actions ctrl+alt+shift+middle echo I'm amazing;;echo that's lots of keys
       - performs echo commands when a middle mouse button is clicked on a cell while pressing ctrl, alt, shift keys
-      - Note: cell column/row is added to the end of command line
+      - Note: %col and %row in command will be replaced with clicked column/row
+          For example: set mouse_actions right observe %col%row
       - Note: available mouse actions are [ctrl+][alt+][shift+](left|right|middle)
       - Note: set value to "clear" to remove mouse action, like
               set mouse_actions ctrl+alt+shift+middle clear
@@ -446,13 +447,14 @@ function tcGetDefaultOptions()
       bold = true,
     },
     mouse_actions = {
-      ["right"] = "tc_observe",
-      ["shift+right"] = "tc_report_bad tc_gt",
-      ["alt+right"] = "tc_report_players tc_gt",
-      ["middle"] = "tc_gt advance",
-      ["left"] = "acid",
-      ["shift+left"] = "water",
-      ["alt+left"] = "lightning",
+      ["right"] = "tc_observe %col%row",
+      ["shift+right"] = "tc_report_players tc_gt %col%row",
+      ["alt+right"] = "tc_report_bad tc_gt %col%row",
+      ["middle"] = "tc_gt advance @M%rowN",
+      ["alt+middle"] = "tc_report_cd tc_gt",
+      ["left"] = "acid %col%row",
+      ["shift+left"] = "water %col%row",
+      ["alt+left"] = "lightning %col%row",
     },
     misc = {
       group_tell_prefix = "@w[@BE@RP@GI@YC @RTC@w] =>@Y",
@@ -882,7 +884,10 @@ end
 
 function tcOnCellMouseUp(flags, hotspot_id)
   if (tc_options.mouse_actions[tcMouseFlagsToName(flags)] ~= nil) then
-    Execute(tc_options.mouse_actions[tcMouseFlagsToName(flags)].." "..hotspot_id)
+    local action = tc_options.mouse_actions[tcMouseFlagsToName(flags)]
+    action = string.gsub(action, "%%col", string.sub(hotspot_id, 1, 1))
+    action = string.gsub(action, "%%row", string.sub(hotspot_id, 2, 2))
+    Execute(action)
   else
     Note("Warn: no action assigned for "..tcMouseFlagsToName(flags).. " click")
   end
