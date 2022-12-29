@@ -43,12 +43,16 @@ TC commands:
   tc_observe <room>- observe given room and capture output, tc_observe a1
   tc_report_bad <channel> <room> - report bad mobs in given room, tc_report_bad tc_gt a1
   tc_report_players <channel> <room> - report players health in given room, tc_report_players echo a1
+  tc_report_cd <channel> - report cooldowns
+  <acid|water|lightning> <room> - perform relevant action on given room
+     - Note: those only worn if plugin is in ON state (tc_on)
   tc_test - show miniwindow with test data capture
+  tc_test_observe <room> - show miniwindow with test observe data capture
+  tc_test_cd - test cooldowns capture
 ]]>
 </description>
 
 </plugin>
-
 
 <!--  Aliases  -->
 
@@ -59,7 +63,6 @@ TC commands:
    enabled="y"
   >
   </alias>
-
   <alias
    script="tcOnMapCmd"
    match="tc_map"
@@ -68,12 +71,44 @@ TC commands:
    sequence="100"
   >
   </alias>
-
   <alias
    script="tcOnObserveCmd"
    match="^tc_observe (?<col>[a-c])(?<row>\d)$"
    regexp="y"
    enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   name = "water"
+   group = "tc_actions"
+   script="tcOnActionCmd"
+   match="^water (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="n"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   name = "acid"
+   group = "tc_actions"
+   script="tcOnActionCmd"
+   match="^acid (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="n"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   name = "lightning"
+   group = "tc_actions"
+   script="tcOnActionCmd"
+   match="^lightning (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="n"
    send_to="12"
    sequence="100"
   >
@@ -97,6 +132,15 @@ TC commands:
   >
   </alias>
   <alias
+   script="tcOnReportCDCmd"
+   match="^tc_report_cd (?<channel>\w+)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
    script="tcOnShowCmd"
    match="tc_show"
    enabled="y"
@@ -104,7 +148,6 @@ TC commands:
    sequence="100"
   >
   </alias>
-
   <alias
    script="tcOnOffCmd"
    match="tc_off"
@@ -113,7 +156,6 @@ TC commands:
    sequence="100"
   >
   </alias>
-
   <alias
    script="tcOnOnCmd"
    match="tc_on"
@@ -122,7 +164,6 @@ TC commands:
    sequence="100"
   >
   </alias>
-
   <alias
    script="tcOnGtCmd"
    match="^tc_gt(?<message>.+)$"
@@ -132,7 +173,6 @@ TC commands:
    sequence="100"
   >
   </alias>
-
   <alias
    script="tcOnOptionsCmd"
    match="^tc_options(?: set (?<key1>[^\s]+) (?<key2>[^\s]+) (?<value>.+)|)$"
@@ -142,7 +182,6 @@ TC commands:
    sequence="100"
   >
   </alias> 
-
   <alias
    script="tcOnOptionsResetCmd"
    match="^tc_options reset$"
@@ -152,10 +191,27 @@ TC commands:
    sequence="100"
   >
   </alias> 
-
   <alias
    script="tcOnTestCmd"
    match="tc_test"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="tcOnTestObserveCmd"
+   match="^tc_test_observe (?<col>[a-c])(?<row>\d)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="tcOnTestCdCmd"
+   match="^tc_test_cd$"
+   regexp="y"
    enabled="y"
    send_to="12"
    sequence="100"
@@ -170,8 +226,12 @@ TC commands:
   </timer>
 </timers>
 
-<!--  Triggers  -->
+<timers>
+  <timer name="cd_timer" enabled="n" second="1" offset_second="0.0" send_to="12" script="tcReduceCDs">  
+  </timer>
+</timers>
 
+<!--  Triggers  -->
 <triggers>
   <trigger
    enabled="n"
@@ -300,6 +360,42 @@ TC commands:
    omit_from_output="y"
   >
   </trigger>
+  <trigger
+   name = "acid"
+   enabled="n"
+   group="tc_capture_cds"
+   keep_evaluating="y"
+   match="^You see acid begin to flood out from room (?<col>[a-c])(?<row>\d).$"
+   regexp="y"
+   script="tcHandleCDStart"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
+  <trigger
+   name = "water"
+   enabled="n"
+   group="tc_capture_cds"
+   keep_evaluating="y"
+   match="^You see a healing geyser erupt at room (?<col>[a-c])(?<row>\d).$"
+   regexp="y"
+   script="tcHandleCDStart"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
+  <trigger
+   name = "lightning"
+   enabled="n"
+   group="tc_capture_cds"
+   keep_evaluating="y"
+   match="^You see lightning strike room (?<col>[a-c])(?<row>\d).$"
+   regexp="y"
+   script="tcHandleCDStart"
+   sequence="2"
+   omit_from_output="n"
+  >
+  </trigger>
 </triggers>
 
 <!--  Script  -->
@@ -311,6 +407,7 @@ require "serialize"
 require "themed_miniwindows"
 require "tprint"
 require "copytable"
+dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 local tc_options = {}
 local map = {}
@@ -353,12 +450,13 @@ function tcGetDefaultOptions()
       ["shift+right"] = "tc_report_bad tc_gt",
       ["alt+right"] = "tc_report_players tc_gt",
       ["middle"] = "tc_gt advance",
-      ["left"] = "say acid",
-      ["shift+left"] = "say water",
-      ["alt+left"] = "say lightning",
+      ["left"] = "acid",
+      ["shift+left"] = "water",
+      ["alt+left"] = "lightning",
     },
     misc = {
       group_tell_prefix = "@w[@BE@RP@GI@YC @RTC@w] =>@Y",
+      show_health_in_cells = true,
     },
   }
   return default_options
@@ -380,7 +478,54 @@ function tcSaveOptions()
   var.config = serialize.save_simple(tc_options)
 end
 
+------ Cooldowns ------
+
+local tc_cooldowns = {
+  water = {
+    max = 10,
+    current = 0,
+    name = "@BWater@W"
+  },
+  acid = {
+    max = 30,
+    current = 0,
+    name = "@gAcid@W"
+  },
+  lightning = {
+    max = 30,
+    current = 0,
+    name = "@CLightning@W"
+  },
+}
+
+function tcExecuteReportCD(channel)
+  local message = "CDs:"
+  for _, val in pairs(tc_cooldowns) do
+    local text = val.current == 0 and "@GREADY" or "@R"..tostring(val.current).."s"
+    text = val.name..":"..text
+    message = message.." "..text
+  end
+  Execute(channel.." "..message)
+end
+
+function tcExecuteAction(name, row, col)
+  Execute("say "..name.." "..col..row)
+end
+
+function tcHandleCDStart(name, line, wildcards)
+  tc_cooldowns[name].current = tc_cooldowns[name].max
+  tcShowWindow()
+end
+
+function tcReduceCDs()
+  for _, val in pairs(tc_cooldowns) do
+    val.current = math.max(val.current - 1, 0)
+  end
+  tcShowWindow()
+end
+
 ------ Map related code ------
+
 function tcExecuteMapCommand()
   map = {}
   EnableTriggerGroup("capture_map_command", 1)
@@ -414,7 +559,7 @@ end
 function tcHandleMapEnd(name, line, wildcards)
   EnableTriggerGroup("capture_map_command", 0)
   EnableTriggerGroup("map_command_gag", 0)
-  tcWindowRedraw()
+  tcShowWindow()
 end
 
 ------ Observe related code ------
@@ -425,6 +570,7 @@ local tc_bad_mobs = {
   ["Commander"] = "@RCommander@Y",
   ["Seraph"] = "@RSeraph@Y",
   ["Vanquisher"] = "@RVanquisher@Y",
+  ["Eliminator"] = "@REliminator@Y",
 }
 local tc_observed = {}
 local tc_observing = false
@@ -443,13 +589,12 @@ function tcEcexuteObserveCmd(row, col)
   end
   tc_observed[tc_row][tc_col] = {mobs={}, players={}}
   EnableTriggerGroup("wait_for_observe_start", 1)
-  Send(echo tc_observe_start;observe;echo tc_observe_end)
+  Send("echo tc_observe_start;observe;echo tc_observe_end")
 end
 
 function tcHandleObserveStart()
   EnableTriggerGroup("wait_for_observe_start", 0)
   EnableTriggerGroup("capture_observe", 1)
-  Note("start")
 end
 
 function tcHandleObserveEnd()
@@ -457,6 +602,9 @@ function tcHandleObserveEnd()
   tc_observing = false
   Execute("tc_report_bad echo "..tc_col..tc_row)
   Execute("tc_report_players echo "..tc_col..tc_row)
+  if tc_options.misc.show_health_in_cells then
+    tcShowWindow()
+  end
 end
 
 function tcHandleObserveEnemyLine(name, line, wildcards)
@@ -469,12 +617,43 @@ function tcHandleObserveEnemyLine(name, line, wildcards)
 end
 
 function tcHandleObservePlayerLine(name, line, wildcards)
-  --Note("player "..wildcards.name.." "..wildcards.hp)
   local t = {
     name = wildcards.name,
     hp = tonumber(wildcards.hp)
   }
   table.insert(tc_observed[tc_row][tc_col].players, t)
+end
+
+function tcGetBadHealth(row, col)
+  if tc_observed[row] == nil or tc_observed[row][col] == nil then
+    return 0
+  end
+
+  local count = 0
+  local hp = 0
+  for i = 1, #tc_observed[row][col].mobs, 1 do
+    if tc_bad_mobs[tc_observed[row][col].mobs[i].name] ~= nil then
+      count = count + 1
+      hp = hp + tc_observed[row][col].mobs[i].hp
+    end
+  end
+
+  return count > 0 and math.ceil(hp / count) or 0
+end
+
+function tcGetPlayerHealth(row, col)
+  if tc_observed[row] == nil or tc_observed[row][col] == nil then
+    return 0
+  end
+
+  local count = 0
+  local hp = 0
+  for i = 1, #tc_observed[row][col].players, 1 do
+    count = count + 1
+    hp = hp + tc_observed[row][col].players[i].hp
+  end
+
+  return count > 0 and math.ceil(hp / count) or 0
 end
 
 function tcExecuteReportBad(channel, row, col)
@@ -492,7 +671,7 @@ function tcExecuteReportBad(channel, row, col)
     end
   end
   if message ~= "" then
-    message = message.." in @M"..col..row
+    message = message.." in @M"..string.upper(col)..row
     Execute(channel.." "..message)
   end
 end
@@ -503,18 +682,13 @@ function tcExecuteReportPlayers(channel, row, col)
     return
   end
 
-  local count = 0
-  local hp = 0
-  for i = 1, #tc_observed[row][col].players, 1 do
-    count = count + 1
-    hp = hp + tc_observed[row][col].players[i].hp
-  end
-
-  if count > 0 then
-    local message = "@G"..tostring(count).."@W players with average @G"..tonumber(hp/count).."@W% HP in @M"..col..row
+  if #tc_observed[row][col].players > 0 then
+    local message = "@G"..tostring(#tc_observed[row][col].players).."@W Players with average @G"..
+                    tostring(tcGetPlayerHealth(row, col)).."@W% HP in @M"..string.upper(col)..row
     Execute(channel.." "..message)
   end
 end
+
 ------ Window functions ------
 
 function tcGetCellSize()
@@ -570,6 +744,22 @@ function tcDrawCell(row, col)
                right, bottom, tc_options.style.zz_color, false)
   end
 
+  -- Draw health bars
+  if tc_options.misc.show_health_in_cells then
+    local arow = tostring(row)
+    local acol = col == 1 and "a" or (col == 2 and "b" or "c")
+    local bh = tcGetBadHealth(arow, acol)
+    local ph = tcGetPlayerHealth(arow, acol)
+    local aleft = left+tc_options.style.text_padding
+    local aright = right-tc_options.style.text_padding
+    local atop = top + tc_options.style.text_padding + WindowFontInfo(window.id, font, 1) + 1
+
+    WindowRectOp(window.id, 1, aleft, atop, aleft + (aright - aleft) * (bh / 100),
+                 atop + 2, tc_options.style.xx_color)
+    WindowRectOp(window.id, 1, aleft, atop + 3, aleft + (aright - aleft) * (ph / 100),
+                 atop + 5, tc_options.style.yy_color)
+  end
+
   if map[row][col].observed then
     local text_width = WindowTextWidth(window.id, font, "*", false)
     WindowText(window.id, font, "*", left + (width - text_width) / 2,
@@ -591,6 +781,7 @@ end
 
 function tcDrawStatic()
   local width, height = tcGetCellSize()
+  local max_height = 0
 
   for row = 0, 9, 1 do
     local top = window.bodytop + tc_options.style.cell_padding_y * (9 - row) + height * (9 - row)
@@ -624,10 +815,9 @@ function tcDrawStatic()
       if row == 0 then
         local text = col == 1 and "A" or (col == 2 and "B" or "C")
         local text_width = WindowTextWidth(window.id, font, text, false)
+        max_height = bottom + tc_options.style.text_padding + WindowFontInfo(window.id, font, 1)
         WindowText(window.id, font, text, left + (width - text_width) / 2, bottom + tc_options.style.text_padding,
-                   left + (width + text_width) / 2,
-                   bottom + tc_options.style.text_padding + WindowFontInfo(window.id, font, 1), 
-                   tc_options.style.text_color, false)
+                   left + (width + text_width) / 2, max_height, tc_options.style.text_color, false)
       end
 
       -- Add/move hotspots
@@ -642,6 +832,7 @@ function tcDrawStatic()
       end
     end
   end
+  return max_height
 end
 
 function tcWindowRedraw()
@@ -653,19 +844,33 @@ function tcWindowRedraw()
       end
     end
   end
-  tcDrawStatic()
+
+  local top = tcDrawStatic() + tc_options.style.text_padding
+  local text_height = WindowFontInfo(window.id, font, 1)
+  local left = window.bodyleft + tc_options.style.text_padding
+
+  -- Draw cooldowns
+  for _, val in pairs(tc_cooldowns) do
+    local text = val.current == 0 and "@GREADY" or "@R"..tostring(val.current).."s"
+    text = val.name..": "..text
+    local text_width = WindowTextWidth(window.id, font, strip_colours(text), false)
+    local styles = ColoursToStyles(text, tc_options.style.text_color, tc_options.style.bg_color, false, false)
+    Theme.WindowTextFromStyles(window.id, font, styles, left, top, left + text_width, top + text_height, false)
+    top = top + text_height + tc_options.style.text_padding
+  end
+
   window:dress_window()
 end
 
 function tcShowWindow()
   if window == nil then
-    window = ThemedBasicWindow("tcWindow", 100, 100, 223, 520, "TC", "center", true, 1, tcWindowRedraw, tcWindowRedraw, tcOnWindowDelete)
+    window = ThemedBasicWindow("tcWindow", 100, 100, 223, 550, "TC", "center", true, 1, tcWindowRedraw, tcWindowRedraw, tcOnWindowDelete)
     font = "tc_font"
     WindowFont(window.id, font, tc_options.font.name, tc_options.font.size, tc_options.font.bold,
                false, false, false, 0, 0)  -- bold
   end
-  window:show()
   tcWindowRedraw()
+  window:show()
 end
 
 function tcOnWindowDelete()
@@ -682,6 +887,7 @@ function tcOnCellMouseUp(flags, hotspot_id)
 end
 
 ------ Mouse buttons helpers -------
+
 function tcMouseFlagsToName(flags)
   local result = ""
   if bit.band(flags, miniwin.hotspot_got_control) ~= 0 then
@@ -723,6 +929,7 @@ function tcNameToMouseFlags(name)
 end
 
 ------ Console commands ------
+
 function tcOnMapCmd()
   tcExecuteMapCommand()
 end
@@ -734,6 +941,9 @@ end
 function tcOnOffCmd()
   tc_enabled = false
   SetTimerOption("auto_map_timer", "enabled", false)
+  SetTimerOption("cd_timer", "enabled", false)
+  EnableAliasGroup("tc_actions", false)
+  EnableTriggerGroup("tc_capture_cds", false)
   if window then window:delete(false) end
 end
 
@@ -743,6 +953,9 @@ function tcOnOnCmd()
     SetTimerOption("auto_map_timer", "second", tc_options.auto_map.period)
     SetTimerOption("auto_map_timer", "enabled", true)
   end
+  SetTimerOption("cd_timer", "enabled", true)
+  EnableAliasGroup("tc_actions", true)
+  EnableTriggerGroup("tc_capture_cds", true)
   tcShowWindow()
 end
 
@@ -833,6 +1046,14 @@ function tcOnReportPlayersCmd(name, line, wildcards)
   tcExecuteReportPlayers(wildcards.channel, wildcards.row, wildcards.col)
 end
 
+function tcOnReportCDCmd(name, line, wildcards)
+  tcExecuteReportCD(wildcards.channel)
+end
+
+function tcOnActionCmd(name, line, wildcards)
+  tcExecuteAction(name, wildcards.row, wildcards.col)
+end
+
 function tcOnTestCmd()
   local test = [[
    -----------------------  Key: [WW+XX
@@ -864,7 +1085,41 @@ function tcOnTestCmd()
   Simulate(test)
 end
 
+function tcOnTestObserveCmd(name, line, wildcards)
+  local test = [[
+tc_observe_start
+You see:
+An Angelic Guardian [100%] is standing there.
+An Angelic Destroyer [100%] is standing there.
+A Warrior-Angel [0%] is standing there.
+The Gate [92%] is standing there.
+An Angelic Enchanter [100%] is standing there.
+An Angelic Immolator [100%] is standing there.
+An Angelic Enchanter [90%] is standing there.
+An Archangel Commander [26%] is fighting Sletch [5%]!
+A Seraph [100%] is standing there.
+An Angelic Vanquisher [100%] is standing there.
+Sletch [5%] is fighting an Archangel Commander [26%]!
+Athlau [100%] is standing there.
+tc_observe_end
+]]
+  tcShowWindow()
+  Execute("tc_observe "..wildcards.col..wildcards.row)
+  Simulate(test)
+end
+
+function tcOnTestCdCmd(name, line, wildcards)
+  local test = [[
+You see acid begin to flood out from room b7.
+You see a healing geyser erupt at room a9.
+You see lightning strike room a9!
+]]
+  Execute("tc_on")
+  Simulate(test)
+end
+
 ------ Plugin Callbacks ------
+
 function tcOnHelp()
   world.Note(world.GetPluginInfo(world.GetPluginID(), 3))
 end
