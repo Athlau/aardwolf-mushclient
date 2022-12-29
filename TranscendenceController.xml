@@ -589,7 +589,9 @@ function tcEcexuteObserveCmd(row, col)
   end
   tc_observed[tc_row][tc_col] = {mobs={}, players={}}
   EnableTriggerGroup("wait_for_observe_start", 1)
-  Send("echo tc_observe_start;observe;echo tc_observe_end")
+  SendNoEcho("echo tc_observe_start")
+  Execute("observe "..col..row)
+  SendNoEcho("echo tc_observe_end")
 end
 
 function tcHandleObserveStart()
