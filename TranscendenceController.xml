@@ -459,6 +459,7 @@ function tcGetDefaultOptions()
     misc = {
       group_tell_prefix = "@w[@BE@RP@GI@YC @RTC@w] =>@Y",
       show_health_in_cells = true,
+      tc_auto_report_bad_cmd = "tc_report_bad tc_gt"
     },
   }
   return default_options
@@ -467,6 +468,9 @@ end
 function tcCheckOptions()
   if tc_options.misc == nil then
     tc_options[misc][group_tell_prefix] = tcGetDefaultOptions().misc.group_tell_prefix
+  end
+  if tc_options.misc.tc_auto_report_bad_cmd == nil then
+    tc_options.misc.tc_auto_report_bad_cmd = tcGetDefaultOptions().misc.tc_auto_report_bad_cmd
   end
 end
 
@@ -606,6 +610,9 @@ function tcHandleObserveEnd()
   tc_observing = false
   Execute("tc_report_bad echo "..tc_col..tc_row)
   Execute("tc_report_players echo "..tc_col..tc_row)
+  if tc_options.misc.tc_auto_report_bad_cmd ~= "" then
+    Execute(tc_options.misc.tc_auto_report_bad_cmd.." "..tc_col..tc_row)
+  end
   if tc_options.misc.show_health_in_cells then
     tcShowWindow()
   end
