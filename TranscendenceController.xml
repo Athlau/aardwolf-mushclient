@@ -46,7 +46,7 @@ TC commands:
   tc_report_players <channel> <room> - report players health in given room, tc_report_players echo a1
   tc_report_cd <channel> - report cooldowns
   <acid|water|lightning> <room> - perform relevant action on given room
-     - Note: those only worn if plugin is in ON state (tc_on)
+     - Note: those will work only if plugin is in ON state (tc_on)
   tc_test - show miniwindow with test data capture
   tc_test_observe <room> - show miniwindow with test observe data capture
   tc_test_cd - test cooldowns capture
