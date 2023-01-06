@@ -27,9 +27,9 @@
    enabled="y"
    group="desolation"
    keep_evaluating="y"
-   match="^(?:\*)?(?:\[(\d+)\] )?Your anguish does .*$"
+   match="^(?:\*)?\[\d+\] Your anguish .*$"
    regexp="y"
-   sequence="5"
+   sequence="150"
    script="Desa_process_damage"
    send_to="12"
 
@@ -125,6 +125,8 @@
 
 <script>
 <![CDATA[
+require "wait"
+
 local desolation_ignore_untill_prompt = false
 local desolation_stack_size = 0
 
@@ -133,19 +135,29 @@ function Desa_prompt()
 end
 
 function Desa_process_damage()
-  if desolation_ignore_untill_prompt then
-    --Note("ignoring")
-  else
-    local stack = AddDesolationStack(-1)
-    if stack == 0 then
-      Execute("des")
+  Note("trig")
+  wait.make(function()
+    wait.time(0.01)
+    if desolation_ignore_untill_prompt then
+      --Note("ignoring")
+      --Note("stack "..tostring(desolation_stack_size))
+    else
+      local stack = AddDesolationStack(-1)
+      --Note("stack "..tostring(desolation_stack_size))
+      if stack == 0 then
+        Execute("des")
+      end
+      desolation_ignore_untill_prompt = true
     end
-    desolation_ignore_untill_prompt = true
-  end
+  end)
 end
 
 function Desa_decrease()
-  AddDesolationStack(-1)
+  --wait.make(function()
+    --wait.time(0.01)
+    AddDesolationStack(-1)
+    --Note("stack "..tostring(desolation_stack_size))
+  --end)
 end
 
 function Desa_clear(name, line, wildcards)
@@ -153,10 +165,13 @@ function Desa_clear(name, line, wildcards)
 end
 
 function Desa_cast(name, line, wildcards)
-  local target = wildcards[1] or ""
-  Send("c 'desolation' "..target)
-  AddDesolationStack(1)
-  Note("stack "..tostring(desolation_stack_size))
+  --wait.make(function()
+    --wait.time(0.3)
+    local target = wildcards[1] or ""
+    Send("c 'desolation' "..target)
+    AddDesolationStack(1)
+    Note("stack "..tostring(desolation_stack_size))
+  --end)
 end
 
 function AddDesolationStack(value)
