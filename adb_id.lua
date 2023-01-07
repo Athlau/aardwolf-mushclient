@@ -16,12 +16,6 @@ function adbIdentifyItem(id, ready_callback)
 -- Clear out fields that may be left over from a previous identification.  Otherwise, we may
 -- be left with incorrect values if a temper or envenom added stats to the item previously.
   idObject.stats = {}
-  --inv.items.setStatField(objId, invStatFieldStr, 0)
-  --inv.items.setStatField(objId, invStatFieldInt, 0)
-  --inv.items.setStatField(objId, invStatFieldWis, 0)
-  --inv.items.setStatField(objId, invStatFieldDex, 0)
-  --inv.items.setStatField(objId, invStatFieldCon, 0)
-  --inv.items.setStatField(objId, invStatFieldLuck, 0)
 
   EnableTrigger(inv.items.trigger.itemIdStartName, true)
   SendNoEcho("id "..id.."\necho {adbIdentifyEnd}")

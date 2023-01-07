@@ -41,10 +41,10 @@ function adbRecentCacheAdd(item)
   local key = adbGetCacheKey(item.colorName, item.zone)
   if adb_recent_cache[key] == nil then
     adb_recent_cache[key] = item
-    adbDebug("Added to cache:", 4)
-    adbDebugTprint(item, 4)
+    adbDebug("Added to cache:", 2)
+    adbDebugTprint(item, 2)
   else
-    adbDebug("found in cache, todo: update timestamp, rooms etc", 4)
+    adbDebug(item.colorName.."already in cache, todo: update timestamp, rooms etc", 1)
   end
 end
 ------ invitem and looted items stacks ------
@@ -126,7 +126,7 @@ function adbLootedStackPush(item)
         -- just remove all entries in invitem stack before the correct one
         for j = #adb_looted_stack + 1, i - 1, 1 do
           local removed = table.remove(adb_invitem_stack, #adb_looted_stack + 1)
-          adbDebug("Removing invitem from unknown source: "..removed.name, 5)
+          adbDebug("Removing invitem from untracked source: "..removed.name, 5)
         end
         table.insert(adb_looted_stack, item)
         return
@@ -146,7 +146,7 @@ function adbLootedStackPush(item)
 end
 
 function adbInvitemStackRemoveLast(name)
-  -- {invitem} messages comes before the actual loot message, so we can't just assume the last entry is the one
+  -- {invitem} message comes before the actual loot message, so we can't just assume the last entry is the one
   -- we need to remove.
   -- Also, there could be other {invitem} elements from untracked sources.
   -- What we know for sure is that the item to remove should be somewhere at or after #adb_looted_stack,
@@ -161,7 +161,7 @@ function adbInvitemStackRemoveLast(name)
 end
 
 function adbInvitemStackPush(item)
-  adbDebug("adbInvitemStackPush "..item.id.." "..item.name)
+  adbDebug("adbInvitemStackPush "..item.id.." "..item.name, 5)
   table.insert(adb_invitem_stack, item)
 end
 
@@ -214,7 +214,7 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
     mob = wildcards.mob,
     colorMob = color_mob,
     zone = gmcp("room.info.zone"),
-    room = tonumber(gmcp("room.info.num")),
+    room = gmcp("room.info.num"),
   }
 
   for i = 1, wildcards.count ~= "" and tonumber(wildcards.count) or 1, 1 do
@@ -268,7 +268,7 @@ function adbOnHelp()
 end
 
 ------ Misc ----
-local adb_debug_level = 4
+local adb_debug_level = 2
 function adbDebug(message, level) 
   if level == nil or level <= adb_debug_level then
     Note("ADB Debug: "..message)
@@ -299,7 +299,7 @@ function OnPluginBroadcast(msg, id, name, text)
       -- 8 - Player in combat
       state = gmcp("char.status.state")
       if state == "8" then
-        if not was_in_combat then adbDebug("-> in combat, 4") end
+        if not was_in_combat then adbDebug("-> in combat", 4) end
         was_in_combat = true
       elseif state == "3" and was_in_combat then
         adbDebug("-> out of combat", 4)
