@@ -66,10 +66,11 @@ function adbIdentifyInit()
                       "^(" ..
                          "\\| .*\\||" ..
                          ".*A full appraisal will reveal further information on this item.|" ..
+                         "\\+-*\\+|"..
                       ")$",
                       "",
                       drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "adbOnItemIdStatsLine", sendto.script, 0))
+                      custom_colour.NoChange, 0, "", "adbOnItemIdStatsLine", sendto.script, 0))
   check (EnableTrigger(inv.items.trigger.itemIdStatsName, false)) -- default to off
 end
 
@@ -77,11 +78,13 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
   -- call dinv original processing function
   inv.items.trigger.itemIdStats(line)
 
-  -- get the colored item name here as I'm too lazy to process invdata
-  local st, en, name
-  st, en, item_name = string.find(line, "Name%s+:%s+(.-)%s*|$")
-  if item_name ~= nil then
-    Note("adbOnItemIdStatsLine got name "..item_name.." at "..tostring(st)..".."..tostring(en))
+  -- get the colored item name
+  if line:find("Name%s+:%s+(.-)%s*|$") then
+    local colored_line = StylesToColours(styles)
+    local name_start, name_end
+    _, name_start = colored_line:find("Name@w%s+:%s+")
+    name_end = colored_line:find("@w%s*|$") or colored_line:find("%s*|$")
+    idObject.colorName = colored_line:sub(name_start + 1, name_end - 1)
   end
 end
 
