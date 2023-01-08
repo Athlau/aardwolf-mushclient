@@ -37,13 +37,17 @@ TC commands:
               set mouse_actions ctrl+alt+shift+middle clear
     tc_options set style xx_border_color 13158600 - change cell outline color for rooms with XX mobs to white
       - Note: use "LUA" value from mush client color picker (ctrl+alt+P) tool to get the color you want
+    tc_options set misc observe_data_validity 5
+      - tc_report_bad/tc_report_players will *first* issue an observe command if room was never observed or
+      - observed more than specified number of seconds ago.
+      - Note: should be set to 1 or more
   tc_options reset - reset options to defaults
   tc_on - enable controller auto functions
   tc_off - disable controller auto functions
   tc_gt - tells to group chat prepending group_tell_prefix from options
-  tc_observe <room>- observe given room and capture output, tc_observe a1
-  tc_report_bad <channel> <room> - report bad mobs in given room, tc_report_bad tc_gt a1
-  tc_report_players <channel> <room> - report players health in given room, tc_report_players echo a1
+  tc_observe <room> - observe given room and capture output, tc_observe a1
+  tc_report_bad <channel> <room> - observe and report bad mobs (if any) in given room, tc_report_bad tc_gt a1
+  tc_report_players <channel> <room> - observe and report players health in given room, tc_report_players echo a1
   tc_report_cd <channel> - report cooldowns
   <acid|water|lightning> <room> - perform relevant action on given room
      - Note: those will work only if plugin is in ON state (tc_on)
@@ -354,7 +358,7 @@ TC commands:
    enabled="n"
    group="capture_observe"
    keep_evaluating="y"
-   match="^tc_observe_end$"
+   match="^tc_observe_end(?: (?<action>.*)|)$"
    regexp="y"
    script="tcHandleObserveEnd"
    sequence="2"
@@ -459,7 +463,7 @@ function tcGetDefaultOptions()
     misc = {
       group_tell_prefix = "@w[@BE@RP@GI@YC @RTC@w] =>@Y",
       show_health_in_cells = true,
-      tc_auto_report_bad_cmd = "tc_report_bad tc_gt"
+      observe_data_validity = 5,
     },
   }
   return default_options
@@ -467,10 +471,17 @@ end
 
 function tcCheckOptions()
   if tc_options.misc == nil then
+    tc_options.misc = {}
     tc_options[misc][group_tell_prefix] = tcGetDefaultOptions().misc.group_tell_prefix
   end
-  if tc_options.misc.tc_auto_report_bad_cmd == nil then
-    tc_options.misc.tc_auto_report_bad_cmd = tcGetDefaultOptions().misc.tc_auto_report_bad_cmd
+  if tc_options.misc.tc_auto_report_bad_cmd ~= nil then
+    tc_options.misc.tc_auto_report_bad_cmd = nil
+  end
+  if tc_options.misc.observe_data_validity == nil then
+    tc_options.misc.observe_data_validity = tcGetDefaultOptions().misc.observe_data_validity
+  end
+  if tc_options.misc.observe_data_validity < 1 then
+    tc_options.misc.observe_data_validity = 1
   end
 end
 
@@ -583,7 +594,7 @@ local tc_observing = false
 local tc_col = nil
 local tc_row = nil
 
-function tcEcexuteObserveCmd(row, col)
+function tcEcexuteObserveCmd(row, col, action)
   if tc_observing then
     Note("observe command queued already, ignoring")
   end
@@ -594,10 +605,11 @@ function tcEcexuteObserveCmd(row, col)
     tc_observed[tc_row] = {}
   end
   tc_observed[tc_row][tc_col] = {mobs={}, players={}}
+  tc_observed[tc_row][tc_col].timestamp = os.time()
   EnableTriggerGroup("wait_for_observe_start", 1)
   SendNoEcho("echo tc_observe_start")
   Execute("observe "..col..row)
-  SendNoEcho("echo tc_observe_end")
+  SendNoEcho("echo tc_observe_end"..(action == nil and "" or " "..action))
 end
 
 function tcHandleObserveStart()
@@ -605,13 +617,13 @@ function tcHandleObserveStart()
   EnableTriggerGroup("capture_observe", 1)
 end
 
-function tcHandleObserveEnd()
+function tcHandleObserveEnd(name, line, wildcards)
   EnableTriggerGroup("capture_observe", 0)
   tc_observing = false
   Execute("tc_report_bad echo "..tc_col..tc_row)
-  Execute("tc_report_players echo "..tc_col..tc_row)
-  if tc_options.misc.tc_auto_report_bad_cmd ~= "" then
-    Execute(tc_options.misc.tc_auto_report_bad_cmd.." "..tc_col..tc_row)
+  Execute("tc_report_players echo "..tc_col..tc_row) 
+  if wildcards.action ~= "" then
+    Execute(wildcards.action)
   end
   if tc_options.misc.show_health_in_cells then
     tcShowWindow()
@@ -668,8 +680,9 @@ function tcGetPlayerHealth(row, col)
 end
 
 function tcExecuteReportBad(channel, row, col)
-  if tc_observed[row] == nil or tc_observed[row][col] == nil then
-    Note("No data for "..col..row)
+  if tc_observed[row] == nil or tc_observed[row][col] == nil or 
+     (os.time() - tc_observed[tc_row][tc_col].timestamp) > tc_options.misc.observe_data_validity then
+    tcEcexuteObserveCmd(row, col, "tc_report_bad "..channel.." "..col..row)
     return
   end
 
@@ -688,8 +701,9 @@ function tcExecuteReportBad(channel, row, col)
 end
 
 function tcExecuteReportPlayers(channel, row, col)
-  if tc_observed[row] == nil or tc_observed[row][col] == nil then
-    Note("No data for "..col..row)
+  if tc_observed[row] == nil or tc_observed[row][col] == nil or 
+     (os.time() - tc_observed[tc_row][tc_col].timestamp) > tc_options.misc.observe_data_validity then
+    tcEcexuteObserveCmd(row, col, "tc_report_players "..channel.." "..col..row)
     return
   end
 
@@ -1003,6 +1017,7 @@ function tcOnOptionsCmd(name, line, wildcards)
     end
     if bool ~= nil then
       tc_options[wildcards.key1][wildcards.key2] = bool
+      tcCheckOptions()
       tcSaveOptions()
       Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
     else
@@ -1011,6 +1026,7 @@ function tcOnOptionsCmd(name, line, wildcards)
   elseif type == "number" then
     if tonumber(wildcards.value) ~= nil then
       tc_options[wildcards.key1][wildcards.key2] = tonumber(wildcards.value)
+      tcCheckOptions()
       tcSaveOptions()
       Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
     else
@@ -1021,6 +1037,7 @@ function tcOnOptionsCmd(name, line, wildcards)
       wildcards.value = nil
     end
     tc_options[wildcards.key1][wildcards.key2] = wildcards.value
+    tcCheckOptions()
     tcSaveOptions()
     Note("Set "..wildcards.key1.." "..wildcards.key2.." to "..tostring(tc_options[wildcards.key1][wildcards.key2]))
   else
@@ -1045,7 +1062,7 @@ function tcOnOptionsResetCmd()
 end
 
 function tcOnGtCmd(name, line, wildcards)
-  Execute("gtell "..tc_options.misc.group_tell_prefix..wildcards.message)
+  SendNoEcho("gtell "..tc_options.misc.group_tell_prefix..wildcards.message)
 end
 
 function tcOnObserveCmd(name, line, wildcards)
