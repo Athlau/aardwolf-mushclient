@@ -416,6 +416,7 @@ dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 local tc_options = {}
 local map = {}
+local tc_observed = {}
 local window = nil
 local font = nil
 local tc_enabled = false
@@ -576,6 +577,25 @@ end
 function tcHandleMapEnd(name, line, wildcards)
   EnableTriggerGroup("capture_map_command", 0)
   EnableTriggerGroup("map_command_gag", 0)
+
+  -- clear observed results if there're no more bad mobs/players in map display
+  for row = 0, 9, 1 do
+    local arow = tostring(row)
+    if tc_observed[arow] ~= nil then
+      for col = 1, 3, 1 do
+        local acol = col == 1 and "a" or (col == 2 and "b" or "c")
+        if tc_observed[arow][acol] ~= nil then
+          if map[row][col].XX == "" or map[row][col].XX == "0" then
+            tc_observed[arow][acol].mobs = {}
+          end
+          if map[row][col].YY == "" or map[row][col].YY == "0" then
+            tc_observed[arow][acol].players = {}
+          end
+        end
+      end
+    end
+  end
+
   tcShowWindow()
 end
 
@@ -589,7 +609,6 @@ local tc_bad_mobs = {
   ["Vanquisher"] = "@RVanquisher@Y",
   ["Eliminator"] = "@REliminator@Y",
 }
-local tc_observed = {}
 local tc_observing = false
 local tc_col = nil
 local tc_row = nil
