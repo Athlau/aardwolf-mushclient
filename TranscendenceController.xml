@@ -412,14 +412,16 @@ require "serialize"
 require "themed_miniwindows"
 require "tprint"
 require "copytable"
+require "wait"
 dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 local tc_options = {}
 local map = {}
-local tc_observed = {}
+local map_in_progress = {}
 local window = nil
 local font = nil
 local tc_enabled = false
+local tc_observed = {}
 
 function tcGetDefaultOptions()
   local default_options = {
@@ -545,7 +547,7 @@ end
 ------ Map related code ------
 
 function tcExecuteMapCommand()
-  map = {}
+  map_in_progress = {}
   EnableTriggerGroup("capture_map_command", 1)
   EnableTriggerGroup("map_command_gag", tc_options.auto_map.gag_output)
   SendNoEcho("map")
@@ -571,12 +573,14 @@ function tcHandleMapLine(name, line, wildcards)
              YY = wildcards.cYY,
              ZZ = wildcards.cZZ,
            }
-  map[tonumber(wildcards.row)] = row
+  map_in_progress[tonumber(wildcards.row)] = row
 end
 
 function tcHandleMapEnd(name, line, wildcards)
   EnableTriggerGroup("capture_map_command", 0)
   EnableTriggerGroup("map_command_gag", 0)
+
+  map = copytable.deep(map_in_progress)
 
   -- clear observed results if there're no more bad mobs/players in map display
   for row = 0, 9, 1 do
@@ -1132,7 +1136,10 @@ function tcOnTestCmd()
 ]]
   tcShowWindow()
   Execute("tc_map")
-  Simulate(test)
+  wait.make(function()
+    wait.time(1.5)
+    Simulate(test)
+  end)
 end
 
 function tcOnTestObserveCmd(name, line, wildcards)
