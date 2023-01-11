@@ -86,8 +86,9 @@ end
 
 function adbDrainIdResultsReadyCB(item)
   if adb_drain_inv_item.id ~= item.stats.id then
-    adbErr("adbDrainIdResultsReadyCB -> somethis is off expected id "..tostring(adb_drain_inv_item.id)..
+    adbErr("adbDrainIdResultsReadyCB -> something is off expected id "..tostring(adb_drain_inv_item.id)..
            "!= "..tostring(item.stats.id))
+    adbDrainOne()
     return
   end
   local t = copytable.deep(item)

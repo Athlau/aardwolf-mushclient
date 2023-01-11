@@ -8,17 +8,25 @@ idObject = {stats={}}
 idReadyCallback = nil
 initialized = false
 
+local adb_id_number = 0
 function adbIdentifyItem(id, ready_callback)
   adbIdentifyInit()
   idReadyCallback = ready_callback
 
-  local objId = ""
--- Clear out fields that may be left over from a previous identification.  Otherwise, we may
--- be left with incorrect values if a temper or envenom added stats to the item previously.
-  idObject.stats = {}
+  idObject = {
+    stats = {},
+  }
 
-  EnableTrigger(inv.items.trigger.itemIdStartName, true)
-  SendNoEcho("id "..id.."\necho {adbIdentifyEnd}")
+  adb_id_number = adb_id_number + 1
+  check (AddTriggerEx(inv.items.trigger.itemIdStartName,
+		      "^{adbIdentifyStart "..tostring(adb_id_number).."}$",
+                      "",
+                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
+                      custom_colour.Custom11, 0, "", "inv.items.trigger.itemIdStart", sendto.script, 0))
+
+  SendNoEcho("\necho {adbIdentifyStart "..adb_id_number.."}"..
+             "\nid "..id..
+             "\necho {adbIdentifyEnd}")
 end
 
 inv = {}
@@ -37,24 +45,6 @@ function adbIdentifyInit()
   end
 
   initialized = true
-  -- Trigger on the start of an identify-ish command (lore, identify, object read, bid, lbid, etc.)
-  check (AddTriggerEx(inv.items.trigger.itemIdStartName,
-                      "^(" ..
-                         ".-----------------------------------------------------------------.*|" ..
-                         "Current bid on this item is.*|"              ..
-                         "You do not have that item.*|"                ..
-                         "You dream about being able to identify.*|"   ..
-                         ".*does not have that item for sale.*|"       ..
-                         "There is no auction item with that id.*|"    ..
-                         ".*currently holds no inventory.*|"           ..
-                         ".* is closed.|"                              ..
-                         "There is no marketplace item with that id.*" ..
-                      ")$",
-                      "inv.items.trigger.itemIdStart(\"%1\")",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.Custom11, 0, "", "", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.itemIdStartName, false)) -- default to off
-
   -- Trigger on one of the detail/stat lines of an item's id report (lore, identify, bid, etc.)
   check (AddTriggerEx(inv.items.trigger.itemIdStatsName,
                       "^(" ..
@@ -82,27 +72,15 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
   end
 end
 
-function inv.items.trigger.itemIdStart(line)
-  if (line == "You do not have that item.") or
-    string.find(line, "currently holds no inventory") or
-    string.find(line, "There is no auction item with that id") or
-    string.find(line, "There is no marketplace item with that id") or
-    string.find(line, "does not have that item for sale") then
-    inv.items.trigger.itemIdEnd()
-    return
-  end -- if
-
-  EnableTrigger(inv.items.trigger.itemIdStartName, false)
-  -- Start watching for stat lines in the item description
+function inv.items.trigger.itemIdStart()
   EnableTrigger(inv.items.trigger.itemIdStatsName, true)
 
-  -- Watch for the end of the item description so that we can stop scanning
-  AddTriggerEx(inv.items.trigger.itemIdEndName,
+  check (AddTriggerEx(inv.items.trigger.itemIdEndName,
                "^{adbIdentifyEnd}$",
                "inv.items.trigger.itemIdEnd()",
-               drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
+               drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput  + trigger_flag.OneShot,
                custom_colour.Custom11,
-               0, "", "", sendto.script, 0)
+               0, "", "", sendto.script, 0))
 end
 
 function inv.items.trigger.itemIdEnd()
