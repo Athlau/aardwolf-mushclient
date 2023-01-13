@@ -67,7 +67,9 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
     local colored_line = StylesToColours(styles)
     local name_start, name_end
     _, name_start = colored_line:find("Name@w%s+:%s+")
-    name_end = colored_line:find("@w%s*|$") or colored_line:find("%s*|$")
+    -- weird, but some items do have spaces in the name, like this one:
+    -- "@RName@w       : @x248a @RDrakosh @x248kite shield                              @w|"
+    name_end = colored_line:find("%s*@w|$") or colored_line:find("@w%s*|$") or colored_line:find("%s*|$")
     idObject.colorName = colored_line:sub(name_start + 1, name_end - 1)
   end
 end
@@ -106,7 +108,7 @@ function inv.items.setStatField(objId, field, value)
   idObject.stats[field] = value
 end -- inv.items.setStatField
 
-function inv.items.getStatField()
+function inv.items.getStatField(objId, field)
   return idObject.stats[field]
 end
 
