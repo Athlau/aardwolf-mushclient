@@ -52,17 +52,30 @@ function adbCacheGetItem(color_name, zone)
   return adb_recent_cache[adbCacheGetKey(color_name, zone)]
 end
 
+function adbCacheGetItemByName(color_name)
+  for k, v in pairs(adb_recent_cache) do
+    if type(v) ~= "table" then
+      -- skip version field
+    elseif v.colorName == color_name then
+      return v
+    end
+  end
+  return nil
+end
+
 function adbCacheAdd(item)
   local key = adbCacheGetKey(item.colorName, item.location.zone)
   local cache_item = adbCacheGetItem(item.colorName, item.location.zone)
   if cache_item == nil then
+    --TODO: limit cache size, evict oldest etc
     adb_recent_cache[key] = item
     adbDebug("Added to cache:", 3)
     adbDebugTprint(item, 3)
-    AnsiNote(ColoursToANSI("\nADB added to cache:\n" .. adbIdReportGetItemString(item)))   
+    AnsiNote(ColoursToANSI("\n@bADB added to cache:\n" .. adbIdReportGetItemString(item)))   
   else
     adbDebug(item.colorName.." already in cache, todo: update timestamp", 3)
-    AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\nADB updated cache item " .. cache_item.colorName .. " :", cache_item.location)))
+    --TODO update timestamp etc
+    AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@bADB updated cache item " .. cache_item.colorName .. " :", cache_item.location)))
   end
 end
 ------ invitem and looted items stacks ------
@@ -111,10 +124,16 @@ function adbDrainOne()
   cache_item = adbCacheGetItem(adb_drain_loot_item.colorName, adb_drain_loot_item.zone)
   if cache_item ~= nil then
     adbDebug(adb_drain_loot_item.colorName.." already in cache, updating mobs/rooms info", 4)
+    local old_location = adbIdReportAddLocationInfo("", cache_item.location)
     adbItemLocationAddMob(cache_item, adbCreateMobFromLootItem(adb_drain_loot_item))
-    -- TODO update timestamp
+    local new_location = adbIdReportAddLocationInfo("", cache_item.location)
+    -- TODO update timestamp?
     adbDebugTprint(cache_item, 4)
-    AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\nADB updated cache item " .. cache_item.colorName .. " :", cache_item.location)))
+    if old_location ~= new_location then
+      AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@bADB updated cache item " .. cache_item.colorName .. " :", cache_item.location)))
+    else
+      AnsiNote(ColoursToANSI("\n@bADB item already in cache: " .. cache_item.colorName))
+    end
     adbDrainOne()
     return
   end
@@ -355,8 +374,21 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj)
     print("base name: ".. adbGetBaseColorName(obj.colorName))
   end, 3)
 
-  AnsiNote(ColoursToANSI(adbIdReportGetItemString(obj)))
-  --SendNoEcho("echo " .. str)
+  local message = adbIdReportGetItemString(obj)
+
+  --TODO: add to cache?
+  local bloot = adbGetBlootLevel(obj.stats.name)
+  local base_name = adbGetBaseColorName(obj.colorName)
+  local cache_item = adbCacheGetItemByName(base_name)
+  if cache_item ~= nil then
+    if bloot > 0 then
+      local diff = adbDiffItems(cache_item, obj)
+      message = adbIdReportAddDiffString(message, diff)
+    end
+    message = adbIdReportAddLocationInfo(message, cache_item.location)
+  end
+
+  AnsiNote(ColoursToANSI(message))
 end
 
 function adbOnHelp()
@@ -373,7 +405,7 @@ local adb_id_colors = {
   flags = "@C",
   weapon = "@M",
   level = "@C",
-  looted = "@B",
+  looted = "@b",
 }
 
 function adbGetStatNumberSafe(stat)
@@ -386,6 +418,7 @@ end
 
 local adb_stat_groups = {
   basics = {
+    order = {"str", "int", "wis", "dex", "con", "luck"},
     ["str"] = "str",
     ["int"] = "int",
     ["wis"] = "wis",
@@ -394,15 +427,21 @@ local adb_stat_groups = {
     ["luck"] = "luk",
   },
   hrdr = {
+    order = {"dam", "hit"},
     ["hit"] = "hr",
     ["dam"] = "dr",
   },
   vitals = {
+    order = {"hp", "mana", "moves"},
     ["hp"] = "hp",
     ["mana"] = "mn",
     ["moves"] = "mv",
   },
   resists = {
+    order = {"allphys", "allmagic", "slash", "pierce", "bash", "acid", "cold", "energy",
+             "holy", "electric", "negative", "shadow", "magic", "air", "earth", "fire",
+             "light", "mental", "sonic", "water", "poison", "disease",
+            },
     ["allphys"] = "allPh",
     ["allmagic"] = "allMg",
     ["slash"] = "slash",
@@ -436,34 +475,36 @@ function adbGetStatsGroupTotal(stats, group)
   return result
 end
 
-function adbGetStatsGroupString(stats, group)
+function adbGetStatsGroupString(stats, group, show_plus)
   local result = ""
-  for k, v in pairs(group) do
-    local stat = adbGetStatNumberSafe(stats[k])
+  for k, v in ipairs(group.order) do
+    local stat = adbGetStatNumberSafe(stats[v])
     if stat ~= 0 then
       result = result .. (result:len() > 0 and " " or "")
-               .. (stat < 0 and adb_id_colors.bad or adb_id_colors.good) .. tostring(stat)
-               .. adb_id_colors.default .. v
+               .. (stat < 0 and adb_id_colors.bad or adb_id_colors.good) 
+               .. ((show_plus and stat > 0) and "+" or "") .. tostring(stat)
+               .. adb_id_colors.default .. group[v]
     end
   end
   return result
 end
 
 function adbGetWeaponString(item)
-  return adb_id_colors.weapon .. adbGetStatStringSafe(item.stats.avedam) .. adb_id_colors.default .. "avg "
+  return adb_id_colors.weapon .. tostring(adbGetStatNumberSafe(item.stats.avedam)) .. adb_id_colors.default .. "avg "
          .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.weapontype) .. " "
          .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.material) .. " "
          .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.damtype) .. " "
          .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.specials)
 end
 
-function adbIdReportAddValue(report, value, label, color)
+function adbIdReportAddValue(report, value, label, color, show_plus)
   if value == nil or value == 0 or value == "" then
     return report
   end
   if report:len() > 0 then report = report .. " " end
 
-  report = report .. adb_id_colors.default .. "[" .. color .. tostring(value) 
+  report = report .. adb_id_colors.default .. "[" .. color
+           .. ((show_plus and type(value) == "number" and value > 0) and "+" or "") .. tostring(value)
            .. adb_id_colors.default .. label .. "]"
   return report
 end
@@ -482,6 +523,26 @@ function adbIdReportAddLocationInfo(report, location)
              .. adb_id_colors.default .. " [" .. adb_id_colors.value .. v.zone .. adb_id_colors.default .. "] "
              .. "Room(s) [" .. adb_id_colors.value .. v.rooms .. adb_id_colors.default .. "]"
   end
+
+  return report
+end
+
+function adbIdReportAddDiffString(report, diff)
+  report = report .. adb_id_colors.looted .. "\n Bloot changes:\n"
+
+  if (diff.stats.avedam ~= nil) then
+    report = adbIdReportAddValue(report, adbGetStatNumberSafe(diff.stats.avedam), "avg", adb_id_colors.weapon, true)
+  end
+
+  report = adbIdReportAddValue(report, diff.stats.score, "score", adb_id_colors.score, true)
+  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.hrdr, true), "", adb_id_colors.default)
+  report = adbIdReportAddValue(report, adbGetStatsGroupTotal(diff.stats, adb_stat_groups.basics), "stats", adb_id_colors.score, true)
+  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.basics, true), "", adb_id_colors.default)
+  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.vitals, true), "", adb_id_colors.default)
+  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.resists, true), "", adb_id_colors.default)
+
+  report = adbIdReportAddValue(report, diff.stats.weight, "wgt", adb_id_colors.value, true)
+  report = adbIdReportAddValue(report, diff.stats.worth, "g", adb_id_colors.value, true)
 
   return report
 end
@@ -540,6 +601,25 @@ local adb_bloot_names = {
   Divine = 20,
   Godly = 21,
 }
+
+local adb_diff_fields = {"score", "weight", "worth", "avedam"}
+function adbDiffItems(item1, item2)
+  local result = {stats={}}
+
+  for k, v in pairs(adb_diff_fields) do
+    result.stats[v] = adbGetStatNumberSafe(item2.stats[v]) - adbGetStatNumberSafe(item1.stats[v])
+  end
+
+  for k, v in pairs(adb_stat_groups) do
+    for k1, v1 in ipairs(v.order) do
+      result.stats[v1] = adbGetStatNumberSafe(item2.stats[v1]) - adbGetStatNumberSafe(item1.stats[v1])
+    end
+  end
+
+  --TODO diff flags, material, weapon specific etc ?
+
+  return result
+end
 
 function adbGetBlootLevel(name)
   -- assuming bloot name is always first word
