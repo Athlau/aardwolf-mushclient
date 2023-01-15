@@ -9,7 +9,7 @@ idReadyCallback = nil
 initialized = false
 
 local adb_id_number = 0
-function adbIdentifyItem(id, ready_callback)
+function adbIdentifyItem(command, ready_callback)
   adbIdentifyInit()
   idReadyCallback = ready_callback
 
@@ -25,7 +25,7 @@ function adbIdentifyItem(id, ready_callback)
                       custom_colour.Custom11, 0, "", "inv.items.trigger.itemIdStart", sendto.script, 0))
 
   SendNoEcho("\necho {adbIdentifyStart "..adb_id_number.."}"..
-             "\nid "..id..
+             "\n".. command ..
              "\necho {adbIdentifyEnd}")
 end
 

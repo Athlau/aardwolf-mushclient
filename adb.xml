@@ -84,7 +84,7 @@ Bla bla bla, add more text here
 <aliases>
   <alias
    script="adbOnIdentifyCommand"
-   match="^aid (?<id>\d+)$"
+   match="^aid (?<id>[^\s]+)(?<worn> worn)?(?: (?<channel>.+))?$"
    regexp="y"
    enabled="y"
    send_to="12"

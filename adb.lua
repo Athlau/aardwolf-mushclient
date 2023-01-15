@@ -40,7 +40,14 @@ end
 function adbCacheLoad()
   if var.recent_cache ~= nil then
     adb_recent_cache = loadstring("return " .. var.recent_cache)()
-    adbDebug("Loaded cache version " .. adb_recent_cache.version, 2)
+    adbDebug(function()
+      Note("Loaded cache version " .. adb_recent_cache.version)
+      local count = 0
+      for _, _ in pairs(adb_recent_cache) do
+        count = count + 1
+      end
+      Note(tostring(count - 1) .. " items in cache.")
+    end, 1)
   end
 end
 
@@ -71,11 +78,11 @@ function adbCacheAdd(item)
     adb_recent_cache[key] = item
     adbDebug("Added to cache:", 3)
     adbDebugTprint(item, 3)
-    AnsiNote(ColoursToANSI("\n@bADB added to cache:\n" .. adbIdReportGetItemString(item)))   
+    AnsiNote(ColoursToANSI("\n@CADB added to cache:\n" .. adbIdReportGetItemString(item)))
   else
     adbDebug(item.colorName.." already in cache, todo: update timestamp", 3)
     --TODO update timestamp etc
-    AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@bADB updated cache item " .. cache_item.colorName .. " :", cache_item.location)))
+    AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@CADB updated cache item " .. cache_item.colorName .. "@C :", cache_item.location)))
   end
 end
 ------ invitem and looted items stacks ------
@@ -130,15 +137,27 @@ function adbDrainOne()
     -- TODO update timestamp?
     adbDebugTprint(cache_item, 4)
     if old_location ~= new_location then
-      AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@bADB updated cache item " .. cache_item.colorName .. " :", cache_item.location)))
+      AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@CADB updated cache item @w[" .. cache_item.colorName .. "@w] @C:", cache_item.location)))
     else
-      AnsiNote(ColoursToANSI("\n@bADB item already in cache: " .. cache_item.colorName))
+      AnsiNote(ColoursToANSI("\n@CADB item already in cache: @w[" .. cache_item.colorName .. "@w]"))
     end
+
+    -- TODO check options here etc
+    if (cache_item.stats.type == "Armor" or cache_item.stats.type == "Weapon" or cache_item.stats.type == "Trash" or
+        cache_item.stats.type == "Treasure") and
+       (cache_item.stats.worth == 0 or (cache_item.stats.weight > 0 and (cache_item.stats.worth / cache_item.stats.weight < 200))) then
+      adbDebug("Dropping item with " .. string.format("%.1f", cache_item.stats.worth / cache_item.stats.weight) .. " g/p")
+      SendNoEcho("drop " .. adb_drain_inv_item.id)
+    else
+      adbDebug("Keeping item with " .. string.format("%.1f", cache_item.stats.worth / cache_item.stats.weight) .. " g/p")
+      SendNoEcho("put " .. adb_drain_inv_item.id .. " 2785187925")
+    end
+
     adbDrainOne()
     return
   end
 
-  adbIdentifyItem(adb_drain_inv_item.id, adbDrainIdResultsReadyCB)
+  adbIdentifyItem("id " .. tostring(adb_drain_inv_item.id), adbDrainIdResultsReadyCB)
 end
 
 function adbMergeMobRooms(mob1, mob2)
@@ -357,8 +376,10 @@ function adbOnAdbDebugDump()
   Note("-------------------------------------")
 end
 
+local adb_identify_channel = ""
 function adbOnIdentifyCommand(name, line, wildcards)
-  adbIdentifyItem(wildcards.id, adbOnIdentifyCommandIdResultsReadyCB)
+  adb_identify_channel = wildcards.channel
+  adbIdentifyItem("id " .. wildcards.id .. wildcards.worn, adbOnIdentifyCommandIdResultsReadyCB)
 end
 
 function adbOnIdentifyCommandIdResultsReadyCB(obj)
@@ -388,7 +409,13 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj)
     message = adbIdReportAddLocationInfo(message, cache_item.location)
   end
 
-  AnsiNote(ColoursToANSI(message))
+  if adb_identify_channel == "" then
+    AnsiNote(ColoursToANSI(message))
+  else
+    for line in message:gmatch("[^\n]+") do
+      SendNoEcho(adb_identify_channel .. " " .. line)
+    end
+  end
 end
 
 function adbOnHelp()
@@ -405,7 +432,7 @@ local adb_id_colors = {
   flags = "@C",
   weapon = "@M",
   level = "@C",
-  looted = "@b",
+  looted = "@M",
 }
 
 function adbGetStatNumberSafe(stat)
