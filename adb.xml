@@ -79,6 +79,19 @@ Bla bla bla, add more text here
    script="adbOnItemLootedCrumblesTrigger"
   >
   </trigger>
+
+  <trigger
+   enabled="y"
+   match="^(?!\| Name       \:).*\((?<bloot>Polished|Enhanced|Burnished|Shiny|Vibrant|Sparkling|Gleaming|Shimmering|Dazzling|Brilliant|Radiant|Wondrous|Majestic|Exalted|Eternal|Legendary|Epic|Mythical|Fabled|Divine|Godly)\).*$"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+   keep_evaluating="y"
+   omit_from_output="y"
+   script="adbOnBlootNameTrigger"
+  >
+  </trigger>
+
 </triggers>
 
 <aliases>

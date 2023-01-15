@@ -89,6 +89,32 @@ end
 local adb_invitem_stack = {}
 local adb_looted_stack = {}
 
+-- Called for all looted items when processing is finished.
+-- <item> is either fresh identify results or a cached version,
+-- so id and item.stats.id could be different!
+function adbOnItemLooted(id, item)
+  -- TODO check options here etc
+  if item == nil or item.stats == nil then
+    adbDebug("got nil item in adbOnItemLooted", 2)
+    return
+  end
+
+  local bloot = adbGetBlootLevel(item.stats.name)
+  if bloot > 0 then
+    adbDebug("Not touching bloot " .. tostring(bloot) .. " item.")
+  end
+
+  if (item.stats.type == "Armor" or item.stats.type == "Weapon" or item.stats.type == "Trash" or
+      item.stats.type == "Treasure") and
+      (item.stats.worth == 0 or (item.stats.weight > 0 and (item.stats.worth / item.stats.weight < 200))) then
+    adbDebug("Dropping item with " .. string.format("%.1f", item.stats.worth / item.stats.weight) .. " g/p")
+    SendNoEcho("drop " .. id)
+  else
+    adbDebug("Keeping item with " .. string.format("%.1f", item.stats.worth / item.stats.weight) .. " g/p")
+    SendNoEcho("put " .. id .. " 2785187925")
+  end
+end
+
 local adb_draining = false
 function adbDrainStacks()
   -- this is very ugly and unsafe, let's see if this will work or not
@@ -142,17 +168,7 @@ function adbDrainOne()
       AnsiNote(ColoursToANSI("\n@CADB item already in cache: @w[" .. cache_item.colorName .. "@w]"))
     end
 
-    -- TODO check options here etc
-    if (cache_item.stats.type == "Armor" or cache_item.stats.type == "Weapon" or cache_item.stats.type == "Trash" or
-        cache_item.stats.type == "Treasure") and
-       (cache_item.stats.worth == 0 or (cache_item.stats.weight > 0 and (cache_item.stats.worth / cache_item.stats.weight < 200))) then
-      adbDebug("Dropping item with " .. string.format("%.1f", cache_item.stats.worth / cache_item.stats.weight) .. " g/p")
-      SendNoEcho("drop " .. adb_drain_inv_item.id)
-    else
-      adbDebug("Keeping item with " .. string.format("%.1f", cache_item.stats.worth / cache_item.stats.weight) .. " g/p")
-      SendNoEcho("put " .. adb_drain_inv_item.id .. " 2785187925")
-    end
-
+    adbOnItemLooted(adb_drain_inv_item.id, cache_item)
     adbDrainOne()
     return
   end
@@ -206,8 +222,6 @@ function adbDrainIdResultsReadyCB(item)
     return
   end
 
-  --if adbGetBlootLevel(item.name)
-
   -- TODO: not sure if "same" items could be carried by mobs in different zones
   -- for now going to have location.zone which is set to first mob's zone
   local t = copytable.deep(item)
@@ -217,6 +231,7 @@ function adbDrainIdResultsReadyCB(item)
   }
   adbItemLocationAddMob(t, adbCreateMobFromLootItem(adb_drain_loot_item))
   adbCacheAdd(t)
+  adbOnItemLooted(item.stats.id, item)
   adbDrainOne()
 end
 
@@ -371,8 +386,8 @@ function adbOnAdbDebugDump()
   tprint(adb_invitem_stack)
   Note("looted stack:")
   tprint(adb_looted_stack)
-  Note("recent cache:")
-  tprint(adb_recent_cache)
+  --Note("recent cache:")
+  --tprint(adb_recent_cache)
   Note("-------------------------------------")
 end
 
@@ -663,6 +678,22 @@ end
 function adbGetBaseColorName(color_name)
   -- never seen Godly items :) not sure if they're in fact ((Godly)) or just (Godly)
   return color_name:gsub("^@[%a%d]+%(@[%a%d]+%a+@[%a%d]+%)@[%a%d]+ ", "")
+end
+
+function adbOnBlootNameTrigger(name, line, wildcards, styles)
+  local bloot_lvl = adb_bloot_names[wildcards.bloot]
+  local bloot = wildcards.bloot
+  if bloot_lvl < 9 then
+    bloot = bloot .. " " .. tostring(bloot_lvl)
+  elseif bloot_lvl < 16 then
+    bloot = bloot .. " <" .. tostring(bloot_lvl) .. ">"
+  else
+    bloot = bloot .. " <<" .. tostring(bloot_lvl) .. ">>"
+  end
+
+  local colored_line = StylesToColours(styles)
+  color_line = colored_line:gsub("%((@[%a%d]+)" .. wildcards.bloot, "%(%1" .. bloot, 1)
+  AnsiNote(ColoursToANSI(color_line))
 end
 
 ------ Debug ------
