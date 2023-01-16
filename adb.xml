@@ -136,7 +136,7 @@
   <trigger
    enabled="n"
    name="adbBlootNameTrigger"
-   match="^(?!\| Name       \:).*\((?<bloot>Polished|Enhanced|Burnished|Shiny|Vibrant|Sparkling|Gleaming|Shimmering|Dazzling|Brilliant|Radiant|Wondrous|Majestic|Exalted|Eternal|Legendary|Epic|Mythical|Fabled|Divine|Godly)\).*$"
+   match="^(?!\| Name       \:)(?!{invitem}).*\((?<bloot>Polished|Enhanced|Burnished|Shiny|Vibrant|Sparkling|Gleaming|Shimmering|Dazzling|Brilliant|Radiant|Wondrous|Majestic|Exalted|Eternal|Legendary|Epic|Mythical|Fabled|Divine|Godly)\).*$"
    regexp="y"
    send_to="12"
    sequence="100"
@@ -145,7 +145,6 @@
    script="adbOnBlootNameTrigger"
   >
   </trigger>
-
 </triggers>
 
 <aliases>

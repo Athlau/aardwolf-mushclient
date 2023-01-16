@@ -1003,7 +1003,6 @@ function adbOnBlootNameTrigger(name, line, wildcards, styles)
   else
     bloot = bloot .. " <<" .. tostring(bloot_lvl) .. ">>"
   end
-
   local colored_line = StylesToColours(styles)
   color_line = colored_line:gsub("%((@[%a%d]+)" .. wildcards.bloot, "%(%1" .. bloot, 1)
   AnsiNote(ColoursToANSI(color_line))
