@@ -3,31 +3,144 @@ require "var"
 require "serialize"
 require "gmcphelper"
 require "wait"
-require "gmcphelper"
 dofile(GetPluginInfo(GetPluginID(), 20).."adb_id.lua")
 
 local adb_options = {}
 
 function adbGetDefaultOptions()
   local default_options = {
-    auto_id_received_items = true
+    version = 1,
+    auto_actions = {
+      on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
+      on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
+      on_normal_looted_cmd = "echo could have done \"put %item bag\" here",
+      on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then SendNoEcho(\"drop %item\") else SendNoEcho(\"put %item 2785187925\") end",
+    },
+    cockpit = {
+      update_db_on_loot = true,
+      show_db_updates = true,
+      show_db_cache_hits = true,
+      show_bloot_level = true,
+      enable_auto_actions = true,
+      identify_command = "id",
+      identify_format = "format.full",
+      identify_channel_format = "format.brief",
+      cache_added_format = "format.full",
+    },
+    colors = {
+      default = "@D",
+      value = "@W",
+      score = "@Y",
+      good = "@G",
+      bad = "@R",
+      flags = "@C",
+      weapon = "@M",
+      level = "@C",
+      section = "@M",
+      enchants = "@C",
+    },
+    ["format.full"] = {
+      level = true,
+      wearable = true,
+      weapon_material = true,
+      score = true,
+      stats_total = true,
+      stats = true,
+      vitals = true,
+      resists = true,
+      weight = true,
+      worth = true,
+      enchants_sir = true,
+      flags = true,
+      foundat = true,
+      enchants_total = true,
+      enchants_details = true,
+      location = true,
+      bloot_diffs = true
+    },
+    ["format.brief"] = {
+      level = true,
+      wearable = true,
+      weapon_material = true,
+      score = true,
+      stats_total = true,
+      stats = true,
+      vitals = false,
+      resists = true,
+      weight = false,
+      worth = false,
+      enchants_sir = true,
+      flags = false,
+      foundat = false,
+      enchants_total = false,
+      enchants_details = false,
+      location = false,
+      bloot_diffs = false
+    },
   }
   return default_options
 end
 
 function adbCheckOptions()
+  if adb_options.version ~= adbGetDefaultOptions().version then
+    adbInfo("ADB options stored are too old, resetting to defaults!")
+    adb_options = copytable.deep(adbGetDefaultOptions())
+  end
+
+  EnableTrigger("adbBlootNameTrigger", adb_options.cockpit.show_bloot_level)
+  EnableTriggerGroup("adbLootTriggerGroup", adb_options.cockpit.update_db_on_loot or adb_options.cockpit.enable_auto_actions)
 end
 
 function adbLoadOptions()
   adb_options = loadstring(string.format("return %s", var.config or serialize.save_simple(adbGetDefaultOptions())))()
-  --TEMP
-  adb_options = loadstring(string.format("return %s", serialize.save_simple(adbGetDefaultOptions())))()
   adbCheckOptions()
   adbSaveOptions()
 end
 
 function adbSaveOptions()
   var.config = serialize.save_simple(adb_options)
+end
+
+function adbOnOptionsCommand(name, line, wildcards)
+  adbInfo("Options:")
+  if wildcards.key1 == "" then
+    tprint(adb_options)
+    return
+  end
+
+  if adb_options[wildcards.key1] == nil then
+    adbInfo("Warn: unknown option group " .. wildcards.key1)
+    return
+  end
+  if adb_options[wildcards.key1][wildcards.key2] == nil then
+    Note("Warn: unknown option " .. wildcards.key2)
+    return
+  end
+
+  local type = type(adb_options[wildcards.key1][wildcards.key2])
+
+  local value = nil
+  if type == "boolean" then
+    value = wildcards.value == "true" and true or nil
+    if wildcards.value == "false" then
+      value = false
+    end
+  elseif type == "number" then
+    value = tonumber(wildcards.value)
+  elseif type == "string" then
+    value = wildcards.value
+  else
+    adbInfo("Warn: unexpected value type " .. type)
+  end
+
+  if value ~= nil then
+    adb_options[wildcards.key1][wildcards.key2] = value
+    adbCheckOptions()
+    adbSaveOptions()
+    adbInfo("Set " .. wildcards.key1 .. " " .. wildcards.key2 .. " to " .. tostring(adb_options[wildcards.key1][wildcards.key2]))
+  else
+    adbInfo(wildcards.value .. " is not a valid " .. type)
+  end
 end
 
 ------ recent cache ------
@@ -40,8 +153,8 @@ end
 function adbCacheLoad()
   if var.recent_cache ~= nil then
     adb_recent_cache = loadstring("return " .. var.recent_cache)()
+    adbInfo("Loaded cache version " .. adb_recent_cache.version)
     adbDebug(function()
-      Note("Loaded cache version " .. adb_recent_cache.version)
       local count = 0
       for _, _ in pairs(adb_recent_cache) do
         count = count + 1
@@ -78,21 +191,49 @@ function adbCacheAdd(item)
     adb_recent_cache[key] = item
     adbDebug("Added to cache:", 3)
     adbDebugTprint(item, 3)
-    AnsiNote(ColoursToANSI("\n@CADB added to cache:\n" .. adbIdReportGetItemString(item)))
+    if adb_options.cockpit.show_db_updates then
+      AnsiNote(ColoursToANSI("@CADB added to cache:\n" .. adbIdReportGetItemString(item, adb_options[adb_options.cockpit.cache_added_format])))
+    end
   else
     adbDebug(item.colorName.." already in cache, todo: update timestamp", 3)
     --TODO update timestamp etc
-    AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@CADB updated cache item " .. cache_item.colorName .. "@C :", cache_item.location)))
+    if adb_options.cockpit.show_db_updates then
+      AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("@CADB updated cache item " .. cache_item.colorName .. "@C :", cache_item.location)))
+    end
   end
 end
 ------ invitem and looted items stacks ------
 local adb_invitem_stack = {}
 local adb_looted_stack = {}
 
+function adbReplacePatterns(cmd, id, bloot, base_item, lua)
+  adbDebug("adbReplacePatterns:" .. cmd, 2)
+  for k, v in pairs(base_item.stats) do
+    -- we might be getting stats from chached item, so don't use it's id
+    if k ~= "id" then
+      local value = v
+      if lua and type(value) == "string" then
+        value = value:gsub("[\"\\]", "\\%1")
+        value = "\"" .. value .. "\""
+      end
+      cmd = cmd:gsub("%%%f[%a]" .. k .. "%f[%A]", value)
+    end
+  end
+  cmd = cmd:gsub("%%%f[%a]" .. "item" .. "%f[%A]", id)
+  cmd = cmd:gsub("%%%f[%a]" .."bloot" .. "%f[%A]", bloot)
+
+  local gpp = base_item.stats.worth == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
+  cmd = cmd:gsub("%%%f[%a]" .."gpp" .. "%f[%A]", gpp)
+
+  adbDebug("replaced cmd:" .. cmd, 2)
+  return cmd
+end
+
 -- Called for all looted items when processing is finished.
 -- <item> is either fresh identify results or a cached version,
 -- so id and item.stats.id could be different!
 function adbOnItemLooted(id, item)
+  adbDebug("adbOnItemLooted " .. id .. " " .. item.stats.name, 2)
   -- TODO check options here etc
   if item == nil or item.stats == nil then
     adbDebug("got nil item in adbOnItemLooted", 2)
@@ -101,17 +242,61 @@ function adbOnItemLooted(id, item)
 
   local bloot = adbGetBlootLevel(item.stats.name)
   if bloot > 0 then
-    adbDebug("Not touching bloot " .. tostring(bloot) .. " item.")
+    adbDebug("Not touching bloot " .. tostring(bloot) .. " item.", 1)
   end
 
-  if (item.stats.type == "Armor" or item.stats.type == "Weapon" or item.stats.type == "Trash" or
-      item.stats.type == "Treasure") and
-      (item.stats.worth == 0 or (item.stats.weight > 0 and (item.stats.worth / item.stats.weight < 200))) then
-    adbDebug("Dropping item with " .. string.format("%.1f", item.stats.worth / item.stats.weight) .. " g/p")
-    SendNoEcho("drop " .. id)
-  else
-    adbDebug("Keeping item with " .. string.format("%.1f", item.stats.worth / item.stats.weight) .. " g/p")
-    SendNoEcho("put " .. id .. " 2785187925")
+  if not adb_options.cockpit.enable_auto_actions then
+    return
+  end
+
+  local cmd
+  cmd = adb_options.auto_actions.on_normal_looted_lua
+  if cmd ~= "" then
+    cmd = adbReplacePatterns(cmd, id, bloot, item, true)
+    local lua = loadstring(cmd)
+    if lua ~= nil then
+      lua()
+    else
+      adbInfo("Failed to compile lua " .. cmd)
+    end
+  end
+  cmd = adb_options.auto_actions.on_normal_looted_cmd
+  if cmd ~= "" then
+    cmd = adbReplacePatterns(cmd, id, bloot, item)
+    Execute(cmd)
+  end
+end
+
+function adbOnBlootItemLooted(id, drain_loot_item)
+  adbDebug("adbOnBlootItemLooted " .. id .. " " .. drain_loot_item.name, 2)
+  if not adb_options.cockpit.enable_auto_actions or
+     (adb_options.auto_actions.on_bloot_looted_cmd == "" and adb_options.auto_actions.on_bloot_looted_lua == "") then
+    return
+  end
+
+  local bloot = adbGetBlootLevel(drain_loot_item.name)
+  local base_name = adbGetBaseColorName(drain_loot_item.colorName)
+  local base_item = adbCacheGetItem(base_name, drain_loot_item.zone)
+  if base_item == nil then
+    adbDebug("base item not found, ignoring bloot scripts", 1)
+    return
+  end
+
+  local cmd
+  cmd = adb_options.auto_actions.on_bloot_looted_lua
+  if cmd ~= "" then
+    cmd = adbReplacePatterns(cmd, id, bloot, base_item, true)
+    local lua = loadstring(cmd)
+    if lua ~= nil then
+      lua()
+    else
+      adbInfo("Failed to compile lua " .. cmd)
+    end
+  end
+  cmd = adb_options.auto_actions.on_bloot_looted_cmd
+  if cmd ~= "" then
+    cmd = adbReplacePatterns(cmd, id, bloot, base_item)
+    Execute(cmd)
   end
 end
 
@@ -148,8 +333,7 @@ function adbDrainOne()
   end
 
   if adbGetBlootLevel(adb_drain_loot_item.name) > 0 then
-    -- TODO option do identify and show bloot diff or something like that here
-    adbDebug("Ignoring bloot " .. adb_drain_loot_item.name, 4)
+    adbOnBlootItemLooted(adb_drain_inv_item.id, adb_drain_loot_item)
     adbDrainOne()
     return
   end
@@ -163,17 +347,22 @@ function adbDrainOne()
     -- TODO update timestamp?
     adbDebugTprint(cache_item, 4)
     if old_location ~= new_location then
-      AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("\n@CADB updated cache item @w[" .. cache_item.colorName .. "@w] @C:", cache_item.location)))
-    else
-      AnsiNote(ColoursToANSI("\n@CADB item already in cache: @w[" .. cache_item.colorName .. "@w]"))
+      if adb_options.cockpit.show_db_updates then
+        AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("@CADB updated cache item @w[" .. cache_item.colorName .. "@w] @C:", cache_item.location)))
+      end
+    elseif adb_options.cockpit.show_db_cache_hits then
+      AnsiNote(ColoursToANSI("@CADB item already in cache: @w[" .. cache_item.colorName .. "@w]"))
     end
-
     adbOnItemLooted(adb_drain_inv_item.id, cache_item)
     adbDrainOne()
     return
   end
 
-  adbIdentifyItem("id " .. tostring(adb_drain_inv_item.id), adbDrainIdResultsReadyCB)
+  if adb_options.cockpit.update_db_on_loot then
+    adbIdentifyItem("id " .. tostring(adb_drain_inv_item.id), adbDrainIdResultsReadyCB)
+  else
+    adbDrainOne()
+  end
 end
 
 function adbMergeMobRooms(mob1, mob2)
@@ -366,7 +555,7 @@ function adbOnItemLootedCrumblesTrigger(name, line, wildcards)
 end
 
 function adbOnInvitemTrigger(name, line, wildcards)
-  adbDebug("invitem "..line, 5)
+  adbDebug("invitem " .. line, 5)
   local t = {
     id = tonumber(wildcards.id),
     name = wildcards.item,
@@ -392,8 +581,15 @@ function adbOnAdbDebugDump()
 end
 
 local adb_identify_channel = ""
+local adb_identify_format = nil
 function adbOnIdentifyCommand(name, line, wildcards)
   adb_identify_channel = wildcards.channel
+  if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
+    adbInfo("Unknown format " .. wildcards.format .. " using default")
+  end
+  adb_identify_format = adb_options[wildcards.format] or
+                        (adb_options[wildcards.channel == "" and
+                         adb_options.cockpit.identify_format or adb_options.cockpit.identify_channel_format])
   adbIdentifyItem("id " .. wildcards.id .. wildcards.worn, adbOnIdentifyCommandIdResultsReadyCB)
 end
 
@@ -410,18 +606,23 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj)
     print("base name: ".. adbGetBaseColorName(obj.colorName))
   end, 3)
 
-  local message = adbIdReportGetItemString(obj)
+  local message = adbIdReportGetItemString(obj, adb_identify_format)
 
   --TODO: add to cache?
-  local bloot = adbGetBlootLevel(obj.stats.name)
-  local base_name = adbGetBaseColorName(obj.colorName)
-  local base_item = adbCacheGetItemByName(base_name)
-  if base_item ~= nil then
-    if bloot > 0 then
-      local diff = adbDiffItems(base_item, obj, true)
-      message = adbIdReportAddDiffString(message, diff)
+
+  if adb_identify_format.location or adb_identify_format.bloot_diffs then
+    local bloot = adbGetBlootLevel(obj.stats.name)
+    local base_name = adbGetBaseColorName(obj.colorName)
+    local base_item = adbCacheGetItemByName(base_name)
+    if base_item ~= nil then
+      if adb_identify_format.bloot_diffs and bloot > 0 then
+        local diff = adbDiffItems(base_item, obj, true)
+        message = adbIdReportAddDiffString(message, diff, adb_identify_format)
+      end
+      if adb_identify_format.location then
+        message = adbIdReportAddLocationInfo(message, base_item.location)
+      end
     end
-    message = adbIdReportAddLocationInfo(message, base_item.location)
   end
 
   if adb_identify_channel == "" then
@@ -433,24 +634,7 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj)
   end
 end
 
-function adbOnHelp()
-  world.Note(world.GetPluginInfo(world.GetPluginID(), 3))
-end
-
 ------ Identify results reporting ------
-local adb_id_colors = {
-  default = "@D",
-  value = "@W",
-  score = "@Y",
-  good = "@G",
-  bad = "@R",
-  flags = "@C",
-  weapon = "@M",
-  level = "@C",
-  looted = "@M",
-  enchants = "@C",
-}
-
 function adbGetStatNumberSafe(stat)
   return stat ~= nil and stat or 0
 end
@@ -524,20 +708,20 @@ function adbGetStatsGroupString(stats, group, show_plus)
     local stat = adbGetStatNumberSafe(stats[v])
     if stat ~= 0 then
       result = result .. (result:len() > 0 and " " or "")
-               .. (stat < 0 and adb_id_colors.bad or adb_id_colors.good) 
+               .. (stat < 0 and adb_options.colors.bad or adb_options.colors.good)
                .. ((show_plus and stat > 0) and "+" or "") .. tostring(stat)
-               .. adb_id_colors.default .. group[v]
+               .. adb_options.colors.default .. group[v]
     end
   end
   return result
 end
 
-function adbGetWeaponString(item)
-  return adb_id_colors.weapon .. tostring(adbGetStatNumberSafe(item.stats.avedam)) .. adb_id_colors.default .. "avg "
-         .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.weapontype) .. " "
-         .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.material) .. " "
-         .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.damtype) .. " "
-         .. adb_id_colors.value .. adbGetStatStringSafe(item.stats.specials)
+function adbGetWeaponString(item, format)
+  return adb_options.colors.weapon .. tostring(adbGetStatNumberSafe(item.stats.avedam)) .. adb_options.colors.default .. "avg "
+         .. adb_options.colors.value .. adbGetStatStringSafe(item.stats.weapontype) .. " "
+         .. (format.weapon_material and (adb_options.colors.value .. adbGetStatStringSafe(item.stats.material) .. " ") or "")
+         .. adb_options.colors.value .. adbGetStatStringSafe(item.stats.damtype) .. " "
+         .. adb_options.colors.value .. adbGetStatStringSafe(item.stats.specials)
 end
 
 function adbIdReportAddValue(report, value, label, color, show_plus)
@@ -546,9 +730,9 @@ function adbIdReportAddValue(report, value, label, color, show_plus)
   end
   if report:len() > 0 then report = report .. " " end
 
-  report = report .. adb_id_colors.default .. "[" .. color
+  report = report .. adb_options.colors.default .. "[" .. color
            .. ((show_plus and type(value) == "number" and value > 0) and "+" or "") .. tostring(value)
-           .. adb_id_colors.default .. label .. "]"
+           .. adb_options.colors.default .. label .. "]"
   return report
 end
 
@@ -558,13 +742,13 @@ function adbIdReportAddLocationInfo(report, location)
   end
 
   if #location.mobs then
-    report = report .. adb_id_colors.looted .. "\n Looted from:"
+    report = report .. "\n" .. adb_options.colors.section .. " Looted from:"
   end
 
   for k, v in pairs(location.mobs) do
-    report = report .. "\n " .. adb_id_colors.value .. v.colorName
-             .. adb_id_colors.default .. " [" .. adb_id_colors.value .. v.zone .. adb_id_colors.default .. "] "
-             .. "Room(s) [" .. adb_id_colors.value .. v.rooms .. adb_id_colors.default .. "]"
+    report = report .. "\n" .. adb_options.colors.value .. " " .. v.colorName
+             .. adb_options.colors.default .. " [" .. adb_options.colors.value .. v.zone .. adb_options.colors.default .. "] "
+             .. "Room(s) [" .. adb_options.colors.value .. v.rooms .. adb_options.colors.default .. "]"
   end
 
   return report
@@ -597,70 +781,122 @@ function adbIdReportAddEnchantsInfo(report, enchants)
   report = report .. "\n"
   for k, v in ipairs(adb_enchants.order) do
     if enchants[v] ~= nil then
-      report = report .. adb_id_colors.enchants .. " " .. v
-      report = adbIdReportAddValue(report, adbGetStatsGroupString(enchants[v], adb_stat_groups.hrdr, true), "", adb_id_colors.default)
-      report = adbIdReportAddValue(report, adbGetStatsGroupString(enchants[v], adb_stat_groups.basics, true), "", adb_id_colors.default)
-      report = adbIdReportAddValue(report, enchants[v].removable and "removable" or "TP only", "", enchants[v].removable and adb_id_colors.good or adb_id_colors.bad)
+      report = report .. adb_options.colors.enchants .. " " .. v
+      report = adbIdReportAddValue(report, adbGetStatsGroupString(enchants[v], adb_stat_groups.hrdr, true), "", adb_options.colors.default)
+      report = adbIdReportAddValue(report, adbGetStatsGroupString(enchants[v], adb_stat_groups.basics, true), "", adb_options.colors.default)
+      report = adbIdReportAddValue(report, enchants[v].removable and "removable" or "TP only", "", enchants[v].removable and adb_options.colors.good or adb_options.colors.bad)
     end
   end
   return report  
 end
 
-function adbIdReportAddDiffString(report, diff)
-  report = report .. adb_id_colors.looted .. "\n Bloot changes:\n"
+function adbIdReportAddDiffString(report, diff, format)
+  report = report .. "\n" .. adb_options.colors.section .. " Bloot changes:\n"
 
   if (diff.stats.avedam ~= nil) then
-    report = adbIdReportAddValue(report, adbGetStatNumberSafe(diff.stats.avedam), "avg", adb_id_colors.weapon, true)
+    report = adbIdReportAddValue(report, adbGetStatNumberSafe(diff.stats.avedam), "avg", adb_options.colors.weapon, true)
   end
 
-  report = adbIdReportAddValue(report, diff.stats.score, "score", adb_id_colors.score, true)
-  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.hrdr, true), "", adb_id_colors.default)
-  report = adbIdReportAddValue(report, adbGetStatsGroupTotal(diff.stats, adb_stat_groups.basics), "stats", adb_id_colors.score, true)
-  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.basics, true), "", adb_id_colors.default)
-  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.vitals, true), "", adb_id_colors.default)
-  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.resists, true), "", adb_id_colors.default)
+  if format.score then
+    report = adbIdReportAddValue(report, diff.stats.score, "score", adb_options.colors.score, true)
+  end
+  report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.hrdr, true), "", adb_options.colors.default)
+  if format.stats_total then
+    report = adbIdReportAddValue(report, adbGetStatsGroupTotal(diff.stats, adb_stat_groups.basics), "stats", adb_options.colors.score, true)
+  end
+  if format.stats then
+    report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.basics, true), "", adb_options.colors.default)
+  end
+  if format.vitals then
+    report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.vitals, true), "", adb_options.colors.default)
+  end
+  if format.resists then
+    report = adbIdReportAddValue(report, adbGetStatsGroupString(diff.stats, adb_stat_groups.resists, true), "", adb_options.colors.default)
+  end
 
-  report = adbIdReportAddValue(report, diff.stats.weight, "wgt", adb_id_colors.value, true)
-  report = adbIdReportAddValue(report, diff.stats.worth, "g", adb_id_colors.value, true)
+  if format.weight then
+    report = adbIdReportAddValue(report, diff.stats.weight, "wgt", adb_options.colors.value, true)
+  end
+  if format.worth then
+    report = adbIdReportAddValue(report, diff.stats.worth, "g", adb_options.colors.value, true)
+  end
 
   return report
 end
 
-function adbIdReportGetItemString(item)
+function adbIdReportGetItemString(item, format)
   local res = ""
-  res = res .. item.colorName
-  res = adbIdReportAddValue(res, item.stats.level, " lvl", adb_id_colors.level)
-  res = adbIdReportAddValue(res, item.stats.wearable, "", adb_id_colors.value)
+  res = res .. (adb_options.cockpit.show_bloot_level and adbAddBlootLevel(item.colorName) or item.colorName)
+  if format.level then
+    res = adbIdReportAddValue(res, item.stats.level, " lvl", adb_options.colors.level)
+  end
+  if format.wearable then
+    res = adbIdReportAddValue(res, item.stats.wearable, "", adb_options.colors.value)
+  end
 
   if (item.stats.type == "Weapon") then
-    res = adbIdReportAddValue(res, adbGetWeaponString(item), "", adb_id_colors.value)
+    res = adbIdReportAddValue(res, adbGetWeaponString(item, format), "", adb_options.colors.value)
   end
 
-  res = adbIdReportAddValue(res, item.stats.score, "score", adb_id_colors.score)
-  res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.hrdr), "", adb_id_colors.default)
-  res = adbIdReportAddValue(res, adbGetStatsGroupTotal(item.stats, adb_stat_groups.basics), "stats", adb_id_colors.score)
-  res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.basics), "", adb_id_colors.default)
-  res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.vitals), "", adb_id_colors.default)
-  res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.resists), "", adb_id_colors.default)
+  if format.score then
+    res = adbIdReportAddValue(res, item.stats.score, "score", adb_options.colors.score)
+  end
+  res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.hrdr), "", adb_options.colors.default)
+  if format.stats_total then
+    res = adbIdReportAddValue(res, adbGetStatsGroupTotal(item.stats, adb_stat_groups.basics), "stats", adb_options.colors.score)
+  end
+  if format.stats then
+    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.basics), "", adb_options.colors.default)
+  end
+  if format.vitals then
+    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.vitals), "", adb_options.colors.default)
+  end
+  if format.resists then
+    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.resists), "", adb_options.colors.default)
+  end
 
-  res = adbIdReportAddValue(res, item.stats.weight, "wgt", adb_id_colors.value)
-  res = adbIdReportAddValue(res, item.stats.worth, "g", adb_id_colors.value)
-  res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_id_colors.enchants)
+  if format.weight then
+    res = adbIdReportAddValue(res, item.stats.weight, "wgt", adb_options.colors.value)
+  end
+  if format.worth then
+    res = adbIdReportAddValue(res, item.stats.worth, "g", adb_options.colors.value)
+  end
+  if format.enchants_sir then
+    res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_options.colors.enchants)
+  end
 
-  res = res .. "\n"
-  res = adbIdReportAddValue(res, item.stats.flags, "", adb_id_colors.value)
-  res = adbIdReportAddValue(res, item.stats.foundat, "", adb_id_colors.value)
+  if format.flags or format.foundat then
+    res = res .. "\n"
+    if format.flags then
+      res = adbIdReportAddValue(res, item.stats.flags, "", adb_options.colors.value)
+    end
+    if format.foundat then
+      res = adbIdReportAddValue(res, item.stats.foundat, "", adb_options.colors.value)
+    end
+  end
 
   if adbEnchantsPresent(item.enchants) then
-    res = res .. "\n"
-    res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_id_colors.enchants)
-    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.enchants, adb_stat_groups.hrdr, true), "", adb_id_colors.default)
-    res = adbIdReportAddValue(res, adbGetStatsGroupTotal(item.enchants, adb_stat_groups.basics, true), "stats", adb_id_colors.score)
-    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.enchants, adb_stat_groups.basics, true), "", adb_id_colors.default)
-    res = adbIdReportAddEnchantsInfo(res, item.enchants)
+    if format.enchants_total or format.enchants_details then
+      res = res .. "\n"
+      if format.enchants_total then
+        res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_options.colors.enchants)
+        res = adbIdReportAddValue(res, adbGetStatsGroupString(item.enchants, adb_stat_groups.hrdr, true), "", adb_options.colors.default)
+        if format.stats_total then
+          res = adbIdReportAddValue(res, adbGetStatsGroupTotal(item.enchants, adb_stat_groups.basics, true), "stats", adb_options.colors.score)
+        end
+        if format.stats then
+          res = adbIdReportAddValue(res, adbGetStatsGroupString(item.enchants, adb_stat_groups.basics, true), "", adb_options.colors.default)
+        end
+      end
+      if format.enchants_details then
+        res = adbIdReportAddEnchantsInfo(res, item.enchants)
+      end
+    end
   end
 
-  res = adbIdReportAddLocationInfo(res, item.location)
+  if format.location then
+    res = adbIdReportAddLocationInfo(res, item.location)
+  end
 
   res = res .. "@w"
   return res
@@ -732,7 +968,25 @@ end
 -- returns colored item name with stripped out bloot tag
 function adbGetBaseColorName(color_name)
   -- never seen Godly items :) not sure if they're in fact ((Godly)) or just (Godly)
-  return color_name:gsub("^@[%a%d]+%(@[%a%d]+%a+@[%a%d]+%)@[%a%d]+ ", "")
+  return color_name:gsub("^@[%a%d]+%(@%a%a+@%a%)@[%a%d]+ ", "")
+end
+
+function adbAddBlootLevel(color_name)
+  local bloot
+  _, _, bloot = color_name:find("%(@%a(%a+)@%a%)")
+  if bloot == nil or adb_bloot_names[bloot] == nil then
+    return color_name
+  end
+  local bloot_lvl = adb_bloot_names[bloot]
+  local bloot_replace = ""
+  if bloot_lvl < 9 then
+    bloot_replace = bloot .. " " .. tostring(bloot_lvl)
+  elseif bloot_lvl < 16 then
+    bloot_replace = bloot .. " <" .. tostring(bloot_lvl) .. ">"
+  else
+    bloot_replace = bloot .. " <<" .. tostring(bloot_lvl) .. ">>"
+  end
+  return color_name:gsub("%((@%a)" .. bloot, "%(%1" .. bloot_replace, 1)
 end
 
 function adbOnBlootNameTrigger(name, line, wildcards, styles)
@@ -752,7 +1006,7 @@ function adbOnBlootNameTrigger(name, line, wildcards, styles)
 end
 
 ------ Debug ------
-local adb_debug_level = 2
+local adb_debug_level = 1
 function adbDebug(what, level) 
   if level ~= nil and level > adb_debug_level then
     return
@@ -777,10 +1031,13 @@ function adbDebugTprint(t, level)
 end
 
 function adbErr(message)
-  ColourNote("white", "red", "ADB ERROR: "..message)
-  ColourNote("white", "red", "Please report this to Athlau with a couple pages of screen output before this message")
+  ColourNote("white", "red", "ADB ERROR: " .. message)
+  ColourNote("white", "red", "Please don't report this to Athlau with a couple pages of screen output before this message ... unless I asked you")
 end
 
+function adbInfo(message)
+  ColourNote("blue", "white", "ADB: " .. message)
+end
 ------ Plugin Callbacks ------
 local was_in_combat = false
 function OnPluginBroadcast(msg, id, name, text)
@@ -801,8 +1058,8 @@ function OnPluginBroadcast(msg, id, name, text)
   end
 end
 
-function tcOnHelp()
-  world.Note(world.GetPluginInfo(world.GetPluginID(), 3))
+function adbOnHelp()
+  AnsiNote(ColoursToANSI(world.GetPluginInfo(world.GetPluginID(), 3)))
 end
 
 function OnPluginInstall()

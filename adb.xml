@@ -19,7 +19,57 @@
    >
 <description trim="y">
 <![CDATA[
-Bla bla bla, add more text here
+@R---------------- ADB plugin loaded ----------------------------------------------
+@CThis is very early version and lots of things are in my todo list, including
+@Cadding more help details and examples.
+@RIt's likely that whatever DB you create would be discarded in the next update@w
+@RAnd yes, there's no sql db under the cache yet, although it's planned@w
+@wBla bla bla, add more text here
+
+@RThis is !experimental! and default settings will automatically drop certain items
+@Ron the ground. Check the on_normal_looted_lua settings.@w
+@RDon't shoot yourself in the leg. Format settings checks aren't there yet.@w
+
+@R!DISABLE THIS IN EPICS!@w
+
+@R    It's required to enable server side invmon for this plugin to work!
+@w    Execute the following command to enable it:
+      @Winvmon
+      @wYou will now see inventory update tags.
+@w    Note: if you're using plugins like dinv then it's already enabled.
+@w    PS. I'm too lazy to write code which enables it :P
+
+@MAvailable commands
+@Wadb help@w - shows this help message
+
+@Waid <item> [worn] [channel] [format.name]@w
+ This command will identify given <item> and report output locally or to a
+ specified channel.
+ Examples:
+ @Waid 2685807183@w  - will identify item and output results locally using 
+                       format specified in identify_format
+ @Waid sword gtell@w - will identify item and output result to group channel
+                       using format specified in identify_channel_format
+ @Waid sword worn t Sletch format.full@w - spam Sletch with full details :P
+
+@Wadb options [set <group> <option> [value]]
+ This command shows or changes ADB options.
+ Examples:
+ @Wadb options@w - show current options
+ @Wadb options set format.full flags false@w - don't show flags in format.full
+ @Wadb options set cockpit show_db_updates false@w - don't show DB update messages
+ @Wadb options set auto_actions on_normal_looted_cmd put %item bag@w -
+   Executes "put %item bag" command for all non-bloot items looted from corpses.
+   @W%item@w will be replaced with looted item id.
+   Note: @Rdon't use bloot actions with anything more than %item, %bloot for now.@w
+         Default options are explicitly conflicting, lua script will drop low cost
+         items and then "_cmd" will try to put this dropped item in *my* bag.
+         You can either modify the lua part to drop item in "else" clause or just
+         clear it if you don't care.
+   TODO: document all other fields available
+ @Wadb options set auto_actions on_normal_looted_cmd@w - clear this action
+ TODO: write more examples here and explain different options...
+@R---------------------------------------------------------------------------------
 ]]>
 </description>
 
@@ -42,13 +92,14 @@ Bla bla bla, add more text here
   </trigger>
 
   <trigger
-   enabled="y"
+   enabled="n"
    match="^{invitem}(?<id>\d+),(.*?),(?<item>.*),(.*?),(.*?),(.*?),(.*?),(.*?)$"
    regexp="y"
    send_to="12"
    sequence="100"
    name="adbInvitemTrigger"
-   omit_from_output="n"
+   group="adbLootTriggerGroup"
+   omit_from_output="y"
    script="adbOnInvitemTrigger"
   >
   </trigger>
@@ -57,18 +108,19 @@ Bla bla bla, add more text here
   <!-- We want to properly capture colored item name to search it in the cash, so have to make 2 similar triggers. -->
   <!-- Making sure that multiline crumble trigger fires after the item looted trigger. -->
   <trigger
-   enabled="y"
+   enabled="n"
    match="^You get (?:(?<gold>[0-9,]+) gold coins?|(?:(?<count>\d+) \* )?(?<item>.*)) from the \w+ corpse of (?<mob>.*)\.$"
    regexp="y"
    send_to="12"
    sequence="100"
    keep_evaluating="y"
+   group="adbLootTriggerGroup"
    script="adbOnItemLootedTrigger"
   >
   </trigger>
 
   <trigger
-   enabled="y"
+   enabled="n"
    match="^You get (?<item>.*) from the \w+ corpse of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
    regexp="y"
    send_to="12"
@@ -76,12 +128,14 @@ Bla bla bla, add more text here
    keep_evaluating="y"
    lines_to_match="2"
    multi_line="y"
+   group="adbLootTriggerGroup"
    script="adbOnItemLootedCrumblesTrigger"
   >
   </trigger>
 
   <trigger
-   enabled="y"
+   enabled="n"
+   name="adbBlootNameTrigger"
    match="^(?!\| Name       \:).*\((?<bloot>Polished|Enhanced|Burnished|Shiny|Vibrant|Sparkling|Gleaming|Shimmering|Dazzling|Brilliant|Radiant|Wondrous|Majestic|Exalted|Eternal|Legendary|Epic|Mythical|Fabled|Divine|Godly)\).*$"
    regexp="y"
    send_to="12"
@@ -97,7 +151,7 @@ Bla bla bla, add more text here
 <aliases>
   <alias
    script="adbOnIdentifyCommand"
-   match="^aid (?<id>[^\s]+)(?<worn> worn)?(?: (?<channel>.+))?$"
+   match="^aid (?<id>[^\s]+)(?<worn> worn)?(?: (?<channel>(?!format\.).+?))?(?: (?<format>format\..+))?$"
    regexp="y"
    enabled="y"
    send_to="12"
@@ -116,6 +170,24 @@ Bla bla bla, add more text here
   <alias
    script="adbDrainStacks"
    match="^adb_debug_drain$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="adbOnHelp"
+   match="^adb help$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="adbOnOptionsCommand"
+   match="^adb options(?: set (?<key1>[^\s]+) (?<key2>[^\s]+)(?: (?<value>.*))?)?$"
    regexp="y"
    enabled="y"
    send_to="12"
