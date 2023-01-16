@@ -6,12 +6,30 @@ dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 idObject = {stats={}}
 idReadyCallback = nil
+idContext = nil
 initialized = false
 
 local adb_id_number = 0
-function adbIdentifyItem(command, ready_callback)
+local adb_id_queue = {}
+local adb_id_busy = false
+function adbIdentifyItem(command, ready_callback, context)
   adbIdentifyInit()
+
+  -- add to queue if we're busy identifying something else already
+  -- this is all weird a bit, wish there were simple atomic ops :(
+  if (adb_id_busy) then
+    local t = {
+      cmd = command,
+      cb = ready_callback,
+      ctx = copytable.deep(context),
+    }
+    table.insert(adb_id_queue, t)
+    return
+  end
+
+  adb_id_busy = true
   idReadyCallback = ready_callback
+  idContext = context
 
   idObject = {
     stats = {},
@@ -28,6 +46,14 @@ function adbIdentifyItem(command, ready_callback)
   SendNoEcho("\necho {adbIdentifyStart "..adb_id_number.."}"..
              "\n".. command ..
              "\necho {adbIdentifyEnd}")
+end
+
+function adbIdCheckQueue()
+  if #adb_id_queue == 0 then
+    return
+  end
+  pending = table.remove(adb_id_queue, 1)
+  adbIdentifyItem(pending.cmd, pending.cb, pending.ctx)
 end
 
 inv = {}
@@ -125,7 +151,9 @@ end
 function inv.items.trigger.itemIdEnd()
   last_enchant = ""
   EnableTrigger(inv.items.trigger.itemIdStatsName, false)
-  idReadyCallback(copytable.deep(idObject))
+  idReadyCallback(copytable.deep(idObject), idContext)
+  adb_id_busy = false
+  adbIdCheckQueue()
 end
 
 dbot = {}

@@ -312,7 +312,6 @@ function adbDrainStacks()
   adbDrainOne()
 end
 
-local adb_drain_inv_item, adb_drain_loot_item
 function adbDrainOne()
   if #adb_invitem_stack == 0 and #adb_looted_stack > 0 then
     adbErr("adbDrainOne -> invitem stack is empty while looted stack is not!?")
@@ -323,8 +322,8 @@ function adbDrainOne()
     return
   end
 
-  adb_drain_inv_item = table.remove(adb_invitem_stack, 1)
-  adb_drain_loot_item = table.remove(adb_looted_stack, 1)
+  local adb_drain_inv_item = table.remove(adb_invitem_stack, 1)
+  local adb_drain_loot_item = table.remove(adb_looted_stack, 1)
 
   if adb_drain_inv_item.name ~= adb_drain_loot_item.name then
     adbErr("adbDrainOne -> inv.name "..adb_drain_inv_item.name.." != "..adb_drain_loot_item.name)
@@ -359,7 +358,11 @@ function adbDrainOne()
   end
 
   if adb_options.cockpit.update_db_on_loot then
-    adbIdentifyItem("id " .. tostring(adb_drain_inv_item.id), adbDrainIdResultsReadyCB)
+    local ctx = {
+      drain_inv_item = adb_drain_inv_item,
+      drain_loot_item = adb_drain_loot_item,
+    }
+    adbIdentifyItem("id " .. tostring(adb_drain_inv_item.id), adbDrainIdResultsReadyCB, ctx)
   else
     adbDrainOne()
   end
@@ -403,9 +406,9 @@ function adbCreateMobFromLootItem(item)
   }
 end
 
-function adbDrainIdResultsReadyCB(item)
-  if adb_drain_inv_item.id ~= item.stats.id then
-    adbErr("adbDrainIdResultsReadyCB -> something is off expected id "..tostring(adb_drain_inv_item.id)..
+function adbDrainIdResultsReadyCB(item, ctx)
+  if ctx.drain_inv_item.id ~= item.stats.id then
+    adbErr("adbDrainIdResultsReadyCB -> something is off expected id "..tostring(ctx.drain_inv_item.id)..
            "!= "..tostring(item.stats.id))
     adbDrainOne()
     return
@@ -415,10 +418,10 @@ function adbDrainIdResultsReadyCB(item)
   -- for now going to have location.zone which is set to first mob's zone
   local t = copytable.deep(item)
   t.location = {
-    zone = adb_drain_loot_item.zone, 
+    zone = ctx.drain_loot_item.zone,
     mobs = {},
   }
-  adbItemLocationAddMob(t, adbCreateMobFromLootItem(adb_drain_loot_item))
+  adbItemLocationAddMob(t, adbCreateMobFromLootItem(ctx.drain_loot_item))
   adbCacheAdd(t)
   adbOnItemLooted(item.stats.id, item)
   adbDrainOne()
@@ -580,20 +583,21 @@ function adbOnAdbDebugDump()
   Note("-------------------------------------")
 end
 
-local adb_identify_channel = ""
-local adb_identify_format = nil
 function adbOnIdentifyCommand(name, line, wildcards)
-  adb_identify_channel = wildcards.channel
   if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
     adbInfo("Unknown format " .. wildcards.format .. " using default")
   end
-  adb_identify_format = adb_options[wildcards.format] or
-                        (adb_options[wildcards.channel == "" and
-                         adb_options.cockpit.identify_format or adb_options.cockpit.identify_channel_format])
-  adbIdentifyItem("id " .. wildcards.id .. wildcards.worn, adbOnIdentifyCommandIdResultsReadyCB)
+  local identify_format = adb_options[wildcards.format] or
+                          (adb_options[wildcards.channel == "" and
+                           adb_options.cockpit.identify_format or adb_options.cockpit.identify_channel_format])
+  local ctx = {
+    channel = wildcards.channel,
+    format = identify_format,
+  }
+  adbIdentifyItem("id " .. wildcards.id .. wildcards.worn, adbOnIdentifyCommandIdResultsReadyCB, ctx)
 end
 
-function adbOnIdentifyCommandIdResultsReadyCB(obj)
+function adbOnIdentifyCommandIdResultsReadyCB(obj, ctx)
   if (obj.stats.name == nil) then
     adbDebug("item not found", 2)
     return
@@ -606,30 +610,30 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj)
     print("base name: ".. adbGetBaseColorName(obj.colorName))
   end, 3)
 
-  local message = adbIdReportGetItemString(obj, adb_identify_format)
+  local message = adbIdReportGetItemString(obj, ctx.format)
 
   --TODO: add to cache?
 
-  if adb_identify_format.location or adb_identify_format.bloot_diffs then
+  if ctx.format.location or ctx.format.bloot_diffs then
     local bloot = adbGetBlootLevel(obj.stats.name)
     local base_name = adbGetBaseColorName(obj.colorName)
     local base_item = adbCacheGetItemByName(base_name)
     if base_item ~= nil then
-      if adb_identify_format.bloot_diffs and bloot > 0 then
+      if ctx.format.bloot_diffs and bloot > 0 then
         local diff = adbDiffItems(base_item, obj, true)
-        message = adbIdReportAddDiffString(message, diff, adb_identify_format)
+        message = adbIdReportAddDiffString(message, diff, ctx.format)
       end
-      if adb_identify_format.location then
+      if ctx.format.location then
         message = adbIdReportAddLocationInfo(message, base_item.location)
       end
     end
   end
 
-  if adb_identify_channel == "" then
+  if ctx.channel == "" then
     AnsiNote(ColoursToANSI(message))
   else
     for line in message:gmatch("[^\n]+") do
-      SendNoEcho(adb_identify_channel .. " " .. line)
+      SendNoEcho(ctx.channel .. " " .. line)
     end
   end
 end
