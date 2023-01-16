@@ -415,13 +415,13 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj)
   --TODO: add to cache?
   local bloot = adbGetBlootLevel(obj.stats.name)
   local base_name = adbGetBaseColorName(obj.colorName)
-  local cache_item = adbCacheGetItemByName(base_name)
-  if cache_item ~= nil then
+  local base_item = adbCacheGetItemByName(base_name)
+  if base_item ~= nil then
     if bloot > 0 then
-      local diff = adbDiffItems(cache_item, obj)
+      local diff = adbDiffItems(base_item, obj, true)
       message = adbIdReportAddDiffString(message, diff)
     end
-    message = adbIdReportAddLocationInfo(message, cache_item.location)
+    message = adbIdReportAddLocationInfo(message, base_item.location)
   end
 
   if adb_identify_channel == "" then
@@ -448,6 +448,7 @@ local adb_id_colors = {
   weapon = "@M",
   level = "@C",
   looted = "@M",
+  enchants = "@C",
 }
 
 function adbGetStatNumberSafe(stat)
@@ -569,6 +570,42 @@ function adbIdReportAddLocationInfo(report, location)
   return report
 end
 
+function adbEnchantsPresent(enchants)
+  for k, v in pairs(adb_enchants) do
+    if enchants[k] ~= nil then
+      return true
+    end
+  end
+  return false
+end
+
+function adbGetEnchantsShortString(item)
+  local res = ""
+  for k, v in ipairs(adb_enchants.order) do
+    if item.enchants[v] ~= nil then
+      res = res .. adb_enchants[v]
+    end
+  end
+  return res
+end
+
+function adbIdReportAddEnchantsInfo(report, enchants)
+  if enchants == nil or not adbEnchantsPresent(enchants) then
+    return report
+  end
+  
+  report = report .. "\n"
+  for k, v in ipairs(adb_enchants.order) do
+    if enchants[v] ~= nil then
+      report = report .. adb_id_colors.enchants .. " " .. v
+      report = adbIdReportAddValue(report, adbGetStatsGroupString(enchants[v], adb_stat_groups.hrdr, true), "", adb_id_colors.default)
+      report = adbIdReportAddValue(report, adbGetStatsGroupString(enchants[v], adb_stat_groups.basics, true), "", adb_id_colors.default)
+      report = adbIdReportAddValue(report, enchants[v].removable and "removable" or "TP only", "", enchants[v].removable and adb_id_colors.good or adb_id_colors.bad)
+    end
+  end
+  return report  
+end
+
 function adbIdReportAddDiffString(report, diff)
   report = report .. adb_id_colors.looted .. "\n Bloot changes:\n"
 
@@ -608,10 +645,20 @@ function adbIdReportGetItemString(item)
 
   res = adbIdReportAddValue(res, item.stats.weight, "wgt", adb_id_colors.value)
   res = adbIdReportAddValue(res, item.stats.worth, "g", adb_id_colors.value)
+  res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_id_colors.enchants)
 
   res = res .. "\n"
   res = adbIdReportAddValue(res, item.stats.flags, "", adb_id_colors.value)
   res = adbIdReportAddValue(res, item.stats.foundat, "", adb_id_colors.value)
+
+  if adbEnchantsPresent(item.enchants) then
+    res = res .. "\n"
+    res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_id_colors.enchants)
+    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.enchants, adb_stat_groups.hrdr, true), "", adb_id_colors.default)
+    res = adbIdReportAddValue(res, adbGetStatsGroupTotal(item.enchants, adb_stat_groups.basics, true), "stats", adb_id_colors.score)
+    res = adbIdReportAddValue(res, adbGetStatsGroupString(item.enchants, adb_stat_groups.basics, true), "", adb_id_colors.default)
+    res = adbIdReportAddEnchantsInfo(res, item.enchants)
+  end
 
   res = adbIdReportAddLocationInfo(res, item.location)
 
@@ -645,7 +692,7 @@ local adb_bloot_names = {
 }
 
 local adb_diff_fields = {"score", "weight", "worth", "avedam"}
-function adbDiffItems(item1, item2)
+function adbDiffItems(item1, item2, ignore_enchants)
   local result = {stats={}}
 
   for k, v in pairs(adb_diff_fields) do
@@ -655,6 +702,14 @@ function adbDiffItems(item1, item2)
   for k, v in pairs(adb_stat_groups) do
     for k1, v1 in ipairs(v.order) do
       result.stats[v1] = adbGetStatNumberSafe(item2.stats[v1]) - adbGetStatNumberSafe(item1.stats[v1])
+      if ignore_enchants then
+        if item1.enchants ~= nil then
+          result.stats[v1] = result.stats[v1] + adbGetStatNumberSafe(item1.enchants[v1])
+        end
+        if item2.enchants ~= nil then
+          result.stats[v1] = result.stats[v1] - adbGetStatNumberSafe(item2.enchants[v1])
+        end
+      end
     end
   end
 

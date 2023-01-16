@@ -15,6 +15,7 @@ function adbIdentifyItem(command, ready_callback)
 
   idObject = {
     stats = {},
+    enchants = {},
   }
 
   adb_id_number = adb_id_number + 1
@@ -58,6 +59,24 @@ function adbIdentifyInit()
   check (EnableTrigger(inv.items.trigger.itemIdStatsName, false)) -- default to off
 end
 
+--Illuminate, Resonate, Solidify
+local last_enchant = ""
+adb_enchants = {
+  order = {"Solidify", "Illuminate", "Resonate"},
+  Illuminate = "I",
+  Resonate = "R",
+  Solidify = "S",
+}
+adb_enchant_stats = {
+  ["Hit roll"] = "hit",
+  ["Damage roll"] = "dam",
+  ["Strength"] = "str",
+  ["Intelligence"] = "int",
+  ["Wisdom"] = "wis",
+  ["Dexterity"] = "dex",
+  ["Constitution"] = "con",
+  ["Luck"] = "luck",
+}
 function adbOnItemIdStatsLine(name, line, wildcards, styles)
   -- call dinv original processing function
   inv.items.trigger.itemIdStats(line)
@@ -71,6 +90,24 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
     -- "@RName@w       : @x248a @RDrakosh @x248kite shield                              @w|"
     name_end = colored_line:find("%s*@w|$") or colored_line:find("@w%s*|$") or colored_line:find("%s*|$")
     idObject.colorName = colored_line:sub(name_start + 1, name_end - 1)
+  end
+
+  -- capture enchants
+  local match = "", removable
+  _, _, match, removable = line:find("^| (%a+)%s+: [%a%s]+ [%+%-]%d+%s+%(removable (.+)%)  |$")
+  if match ~= nil and adb_enchants[match] ~= nil then
+    last_enchant = match
+    idObject.enchants[match] = {
+      ["removable"] = removable == "by enchanter",
+    }
+  end
+  if last_enchant ~= "" then
+    local stat, value
+    _, _, stat, value = line:find("^| %a*%s+: ([%a%s]+) ([%+%-]%d+)%s+%(removable .+%)  |$")
+    if stat ~= nil then
+      idObject.enchants[last_enchant][adb_enchant_stats[stat]] = tonumber(value)
+      idObject.enchants[adb_enchant_stats[stat]] = adbGetStatNumberSafe(idObject.enchants[adb_enchant_stats[stat]]) + tonumber(value)
+    end
   end
 end
 
@@ -86,6 +123,7 @@ function inv.items.trigger.itemIdStart()
 end
 
 function inv.items.trigger.itemIdEnd()
+  last_enchant = ""
   EnableTrigger(inv.items.trigger.itemIdStatsName, false)
   idReadyCallback(copytable.deep(idObject))
 end
