@@ -14,7 +14,7 @@ function adbGetDefaultOptions()
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
       on_normal_looted_cmd = "echo could have done \"put %item bag\" here",
-      on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then SendNoEcho(\"drop %item\") else SendNoEcho(\"put %item 2785187925\") end",
+      on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then Send(\"drop %item\") else Send(\"put %item 2785187925\") end",
     },
     cockpit = {
       update_db_on_loot = true,
@@ -255,6 +255,7 @@ function adbOnItemLooted(id, item)
     cmd = adbReplacePatterns(cmd, id, bloot, item, true)
     local lua = loadstring(cmd)
     if lua ~= nil then
+      adbDebug("Executing lua " .. cmd, 3)
       lua()
     else
       adbInfo("Failed to compile lua " .. cmd)
@@ -263,6 +264,7 @@ function adbOnItemLooted(id, item)
   cmd = adb_options.auto_actions.on_normal_looted_cmd
   if cmd ~= "" then
     cmd = adbReplacePatterns(cmd, id, bloot, item)
+    adbDebug("Executing cmd " .. cmd, 3)
     Execute(cmd)
   end
 end
@@ -288,6 +290,7 @@ function adbOnBlootItemLooted(id, drain_loot_item)
     cmd = adbReplacePatterns(cmd, id, bloot, base_item, true)
     local lua = loadstring(cmd)
     if lua ~= nil then
+      adbDebug("Executing lua " .. cmd, 3)
       lua()
     else
       adbInfo("Failed to compile lua " .. cmd)
@@ -296,6 +299,7 @@ function adbOnBlootItemLooted(id, drain_loot_item)
   cmd = adb_options.auto_actions.on_bloot_looted_cmd
   if cmd ~= "" then
     cmd = adbReplacePatterns(cmd, id, bloot, base_item)
+    adbDebug("Executing cmd " .. cmd, 3)
     Execute(cmd)
   end
 end
@@ -439,17 +443,29 @@ end
 
 function adbLootedStackPush(item)
   adbDebug("adbLootedStackPush "..item.colorName, 5)
+
+  -- It seems that invitem messages trim "," in item name, like this:
+  -- a tarnished, silver flute (200)
+  -- {invitem}2786399276,,a tarnished silver flute,200,6,0,-1,-1
+  -- So strip name and compare against as well
+  local nocommas_name = item.name:gsub(",", "")
+
   -- {invitem} messages comes before the actual loot message,
   -- so there should be an item with same name in invitem stack already.
   if adb_invitem_stack[#adb_looted_stack + 1] ~= nil and 
-     adb_invitem_stack[#adb_looted_stack + 1].name == item.name then
+     (adb_invitem_stack[#adb_looted_stack + 1].name == item.name or
+      adb_invitem_stack[#adb_looted_stack + 1].name == nocommas_name) then
+    -- Fix invitem name to include commas if there're any
+    adb_invitem_stack[#adb_looted_stack + 1].name = item.name
     table.insert(adb_looted_stack, item)
   else
     -- invmon events happen when we receive items from any source and not just looting from corpse
     -- let's try to see if we can find a match down the stack
     -- another alternative would be to write triggers to all those buy/auction/give etc messages, but i'm lazy
     for i = #adb_looted_stack + 2, #adb_invitem_stack, 1 do
-      if adb_invitem_stack[i].name == item.name then
+      if adb_invitem_stack[i].name == item.name or adb_invitem_stack[i].name == nocommas_name then
+        -- Fix invitem name to include commas if there're any
+        adb_invitem_stack[i].name = item.name
         -- just remove all entries in invitem stack before the correct one
         for j = #adb_looted_stack + 1, i - 1, 1 do
           local removed = table.remove(adb_invitem_stack, #adb_looted_stack + 1)
