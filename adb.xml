@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.001"
+   version="1.002"
    >
 <description trim="y">
 <![CDATA[
@@ -47,7 +47,9 @@
  specified channel.
  Examples:
  @Waid 2685807183@w  - will identify item and output results locally using 
-                       format specified in identify_format
+                       format specified in @Gidentify_format@w
+ @Waid something format.full@w  - will identify item and output results locally
+                                 using format.full settings
  @Waid sword gtell@w - will identify item and output result to group channel
                        using format specified in identify_channel_format
  @Waid sword worn t Sletch format.full@w - spam Sletch with full details :P
@@ -112,6 +114,13 @@
  @Widentify_channel_format@w - default "aid" output format when sending to a channel.
    TODO: more details on format, add format add/remove commands.
    For now you can check options under "format.brief" and "format.full"
+
+@Wadb format add <format.newname> <existing name>@w - adds new output format with specified <new name>
+  and copies settings from existing format. After adding a format you can change it's settings
+  via @Wadb options set <format.newname> <setting> <value>@w
+  For example: adb format add format.mine format.brief
+@Wadb format remove <existing name>@w - remove existing output format
+  For example: adb format remove format.mine
 
 @Wadb [off|on]@w - disable or enable auto actions.
   It's the same as typing longer command:
@@ -269,6 +278,27 @@
   >
   <send>adb options set cockpit enable_auto_actions true</send>
   </alias>
+
+  <alias
+   script="adbOnFormatAdd"
+   match="^adb format add (?<new>format\..+) (?<old>format\..+)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
+   script="adbOnFormatRemove"
+   match="^adb format remove (?<old>format\..+)$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
 </aliases>
 
 <!--  Script  -->

@@ -9,7 +9,7 @@ local adb_options = {}
 
 function adbGetDefaultOptions()
   local default_options = {
-    version = 1,
+    version = 1.001,
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
@@ -56,7 +56,8 @@ function adbGetDefaultOptions()
       enchants_total = true,
       enchants_details = true,
       location = true,
-      bloot_diffs = true
+      bloot_diffs = true,
+      sections_name_newline = true,
     },
     ["format.brief"] = {
       level = true,
@@ -75,13 +76,20 @@ function adbGetDefaultOptions()
       enchants_total = false,
       enchants_details = false,
       location = false,
-      bloot_diffs = false
+      bloot_diffs = false,
+      sections_name_newline = false,
     },
   }
   return default_options
 end
 
 function adbCheckOptions()
+  if adb_options.version == 1 then
+    adb_options.version = 1.001
+    adb_options["format.full"].sections_name_newline = true
+    adb_options["format.brief"].sections_name_newline = false
+  end
+
   if adb_options.version ~= adbGetDefaultOptions().version then
     adbInfo("ADB options stored are too old, resetting to defaults!")
     adb_options = copytable.deep(adbGetDefaultOptions())
@@ -149,6 +157,31 @@ function adbOnOptionsCommand(name, line, wildcards)
   end
 end
 
+function adbOnFormatAdd(name, line, wildcards)
+  if adb_options[wildcards.old] == nil then
+    adbInfo("Can't copy format from " .. wildcards.old)
+    return
+  end
+  if adb_options[wildcards.new] == nil then
+    adb_options[wildcards.new] = copytable.deep(adb_options[wildcards.old])
+    adbInfo("Added format " .. wildcards.new)
+  else
+    adbInfo("Format " .. wildcards.new .. " already exists.")
+  end
+end
+
+function adbOnFormatRemove(name, line, wildcards)
+  if adb_options[wildcards.old] ~= nil then
+    if adbGetDefaultOptions()[wildcards.old] ~= nil then
+      adbInfo("Can't remove default format " .. wildcards.old)
+    else
+      adb_options[wildcards.old] = nil
+      adbInfo("Removed format " .. wildcards.old)
+    end
+  else
+    adbInfo("Format " .. wildcards.old .. " not found.")
+  end
+end
 ------ recent cache ------
 local adb_recent_cache = {version = 1.0}
 
@@ -818,7 +851,10 @@ function adbIdReportAddEnchantsInfo(report, enchants)
 end
 
 function adbIdReportAddDiffString(report, diff, format)
-  report = report .. "\n" .. adb_options.colors.section .. " Bloot changes:\n"
+  report = report .. "\n" .. adb_options.colors.section .. " Bloot changes:"
+  if format.sections_name_newline then
+    report = report .. "\n"
+  end
 
   if (diff.stats.avedam ~= nil) then
     report = adbIdReportAddValue(report, adbGetStatNumberSafe(diff.stats.avedam), "avg", adb_options.colors.weapon, true)
