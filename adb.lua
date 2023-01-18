@@ -21,7 +21,7 @@ function adbGetDefaultOptions()
       show_db_updates = true,
       show_db_cache_hits = true,
       show_bloot_level = true,
-      enable_auto_actions = true,
+      enable_auto_actions = false,
       identify_command = "id",
       identify_format = "format.full",
       identify_channel_format = "format.brief",
@@ -89,6 +89,12 @@ function adbCheckOptions()
 
   EnableTrigger("adbBlootNameTrigger", adb_options.cockpit.show_bloot_level)
   EnableTriggerGroup("adbLootTriggerGroup", adb_options.cockpit.update_db_on_loot or adb_options.cockpit.enable_auto_actions)
+end
+
+function adbOnOptionsResetCommand()
+  adb_options = copytable.deep(adbGetDefaultOptions())
+  adbCheckOptions()
+  adbSaveOptions()
 end
 
 function adbLoadOptions()
@@ -243,6 +249,7 @@ function adbOnItemLooted(id, item)
   local bloot = adbGetBlootLevel(item.stats.name)
   if bloot > 0 then
     adbDebug("Not touching bloot " .. tostring(bloot) .. " item.", 1)
+    return
   end
 
   if not adb_options.cockpit.enable_auto_actions then
@@ -279,11 +286,11 @@ function adbOnBlootItemLooted(id, drain_loot_item)
   local bloot = adbGetBlootLevel(drain_loot_item.name)
   local base_name = adbGetBaseColorName(drain_loot_item.colorName)
   local base_item = adbCacheGetItem(base_name, drain_loot_item.zone)
+  -- TODO add option to actually identify bloot items too?
   if base_item == nil then
     adbDebug("base item not found, ignoring bloot scripts", 1)
     return
   end
-
   local cmd
   cmd = adb_options.auto_actions.on_bloot_looted_lua
   if cmd ~= "" then

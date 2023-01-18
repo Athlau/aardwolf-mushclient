@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.0"
+   version="1.001"
    >
 <description trim="y">
 <![CDATA[
@@ -52,10 +52,11 @@
                        using format specified in identify_channel_format
  @Waid sword worn t Sletch format.full@w - spam Sletch with full details :P
 
-@Wadb options [set <group> <option> [value]]
+@Wadb options [set <group> <option> [value]]@w
  This command shows or changes ADB options.
  Examples:
  @Wadb options@w - show current options
+ @Wadb options reset@w - reset options to defaults.
  @Wadb options set format.full flags false@w - don't show flags in format.full
  @Wadb options set cockpit show_db_updates false@w - don't show DB update messages
  @Wadb options set auto_actions on_normal_looted_cmd put %item bag@w -
@@ -68,6 +69,54 @@
          clear it if you don't care.
    TODO: document all other fields available
  @Wadb options set auto_actions on_normal_looted_cmd@w - clear this action
+
+@Ccockpit@W options@w
+ Those could be set via @Wadb options set cockpit <options> <value>@w:
+ @Wenable_auto_actions <true|false>@w - enables or disables auto actions.
+   Those actions from @Cauto_actions@w group are executed when you loot an item.
+   @mon_normal_looted_lua@w - lua script, executed when you loot normal - not bloot item.
+   @mon_normal_looted_cmd@w - regular command, it's sent to "Execute" so you can use
+                          aliases here.
+
+   For "normal" looted items you can use all of the item fields prefixed with % symbol
+   to get actual values for the given item. Those pretty much are the same as listed
+   in @G"dinv help query"@w. With an exception of @Gid@w field which is replaced by @G%item@w.
+   TODO: list fields
+   There are few special fields available:
+   @G%item@w - looted item ID.
+   @G%bloot@w - bloot level of the item, 0 for "normal" loot.
+   @G%gpp@w - item's gold per pount value, worth/weight (checked for division by 0).
+
+   @mon_bloot_looted_lua@w and @mon_bloot_looted_cmd@w are the same as normal actions,
+   but are only executed for bonus loot items. In other words %bloot is bigger than 0.
+   @RNote@R: bonus loot items aren't automatically identified. Instead you will get
+   all field values from it's "base" counterpart if that's found in the DB.
+   I'm trying to decide if this usable or should there be an options to actually
+   identify bloot items as well.
+
+ @Wshow_bloot_level <true|false>@w - show/hide bloot level next to bloot names in game.
+   If enabled changes your game output to look like this:
+     @R(K)@B(M)@W(G)@C(H) @G(@WShimmering 8@G)@w @yM@Yon@ykey @wB@Wo@wne @W(@G154@W)
+     @R(K)@B(M)@W(G)@C(H) @G(@WPolished 1@G)@w @RBi@Gol@Bum@Yin@Ces@Mce@Wnc@Re!@w @W(@G150@W)
+     @R(K)@B(M)@W(G)@C(H) @R(@WRadiant <11>@R)@w a pair of icy boots @W(@G198@W)
+     @R(K)@B(M)@W(G)@C(H) @G(@WEnhanced 2@G)@w @YE@ylvish @YR@yobes @Yo@yf @YP@yriesthood@w @W(@G153@W)@w
+
+ @Widentify_command@w - command to use for item identification. Default's to "id",
+   @rNot implemented@w
+ @Wupdate_db_on_loot <true|false>@w   - update DB with looted items.
+ @Wshow_db_updates <true|false>@w     - show/hide information when new items are adeed to DB.
+ @Wshow_db_cache_hits <true|false>@w  - show/hide DB cache hit messages.
+ @Wcache_added_format <format.name>@w - item ID output format used to display new items.
+   For now it's either @Gformat.full@w or @Gformat.brief@w
+ @Widentify_format@w - default "aid" output format when channel is not specifief.
+ @Widentify_channel_format@w - default "aid" output format when sending to a channel.
+   TODO: more details on format, add format add/remove commands.
+   For now you can check options under "format.brief" and "format.full"
+
+@Wadb [off|on]@w - disable or enable auto actions.
+  It's the same as typing longer command:
+  @Wasb options set cockpit enable_auto_actions [false|true]@w
+
  TODO: write more examples here and explain different options...
 @R---------------------------------------------------------------------------------
 ]]>
@@ -80,7 +129,7 @@
 
 <triggers>
   <trigger
-   enabled="n"
+   enabled="y"
    match="^{invmon}(?<action>\d+)\,(?<id>\d+)\,.+\,.+$"
    regexp="y"
    send_to="12"
@@ -192,6 +241,33 @@
    send_to="12"
    sequence="100"
   >
+  </alias>
+  <alias
+   script="adbOnOptionsResetCommand"
+   match="^adb options reset$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   match="^adb off$"
+   regexp="y"
+   enabled="y"
+   send_to="10"
+   sequence="100"
+  >
+  <send>adb options set cockpit enable_auto_actions false</send>
+  </alias>
+  <alias
+   match="^adb on$"
+   regexp="y"
+   enabled="y"
+   send_to="10"
+   sequence="100"
+  >
+  <send>adb options set cockpit enable_auto_actions true</send>
   </alias>
 </aliases>
 

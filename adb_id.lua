@@ -34,6 +34,7 @@ function adbIdentifyItem(command, ready_callback, context)
   idObject = {
     stats = {},
     enchants = {},
+    identifyLevel = "full",
   }
 
   adb_id_number = adb_id_number + 1
@@ -166,6 +167,10 @@ function dbot.tonumber(numString)
   return tonumber(noCommas)
 end -- dbot.tonumber
 
+function inv.items.setField(objId, field, value)
+  idObject.stats[field] = value
+end
+
 function inv.items.setStatField(objId, field, value) 
   assert(objId ~= nil, "inv.items.setStatField: nil objId parameter")
   assert(field ~= nil, "inv.items.setStatField: nil field parameter for item " .. objId)
@@ -180,6 +185,7 @@ end
 
 inv.items.identifyPkg = {}
 inv.items.identifyPkg.objId = ""
+
 ----------------------------------------------------------------------------------------
 -- Try to not modify anything below this line. It's an exact copy-pase of dinv functions
 -- This way it should be easier to keep up to date with dinv code.
@@ -212,6 +218,11 @@ function dbot.mergeFields(field1, field2)
 
   return mergedField
 end -- dbot.mergeFields
+
+invFieldIdentifyLevel = "identifyLevel"
+invIdLevelNone    = "none"  -- item has not be ID'ed in any way
+invIdLevelPartial = "partial" -- item has been partially ID'ed  but more details are hidden
+invIdLevelFull    = "full"  -- item has been ID'ed fully and no details are hidden
 
 ----------------------------------------------------------------------------------------------------
 -- Definitions for fields in identified items
