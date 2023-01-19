@@ -7,6 +7,29 @@ dofile(GetPluginInfo(GetPluginID(), 20).."adb_id.lua")
 
 local adb_options = {}
 
+local adb_options_description = {
+  format = {
+    level = "Show item level",
+    wearable = "Show wearable location",
+    weapon_material = "Show material for Weapons",
+    score = "Show score field",
+    stats_total = "Show total number of item Stats bonuses",
+    stats = "Show individual item Stats such as int, wis etc.",
+    vitals = "Show vitals such as hp, mana, moves.",
+    resists = "Show item bonuses to resists",
+    weight = "Show item weight",
+    worth = "Show item worth value",
+    enchants_sir = "Show [SRI] based on item enchants",
+    flags = "Show item flags field",
+    foundat = "Show item foundat field",
+    enchants_total = "Show summary of item enchants",
+    enchants_details = "Show detailed enchants information",
+    location = "Show item location from DB",
+    bloot_diffs = "Show difference between base and bloot items",
+    sections_name_newline = "Add newlines after report sections",
+  },
+}
+
 function adbGetDefaultOptions()
   local default_options = {
     version = 1.001,
@@ -102,6 +125,7 @@ end
 
 function adbOnOptionsResetCommand()
   adb_options = copytable.deep(adbGetDefaultOptions())
+  adbInfo("ADB options reset to defaults!")
   adbCheckOptions()
   adbSaveOptions()
 end
@@ -114,6 +138,64 @@ end
 
 function adbSaveOptions()
   var.config = serialize.save_simple(adb_options)
+end
+
+function adbOnOptionsEditCommand(name, line, wildcards)
+  local keys = {}
+  for k, v in pairs(adb_options) do
+    -- Skip version
+    if (type(v) == "table") then
+      keys[k] = k
+    end
+  end
+  local key1 = utils.choose("Select option group to edit", "ADB", keys, "cockpit")
+  if key1 == nil then
+    return
+  end
+  key1 = keys[key1]
+  assert(adb_options[key1])
+
+  if key1:find("^format%.") then
+    Execute("adb format edit " .. key1)
+    return
+  end
+
+  keys = {}
+  for k, _ in pairs(adb_options[key1]) do
+    table.insert(keys, k)
+  end
+  local key2 = utils.choose("Select option to edit", "ADB", keys, 1)
+  if key2 == nil then
+    return
+  end
+  key2 = keys[key2]
+
+  assert(adb_options[key1][key2] ~= nil)
+  if type(adb_options[key1][key2]) == "string" then
+    if key1 == "cockpit" and (key2 == "identify_format" or key2 == "identify_channel_format" or key2 == "cache_added_format") then
+      local format = adbPickFormat("Choose " .. key2, adb_options[key1][key2])
+      if format == nil then return end
+      adb_options[key1][key2] = format
+    elseif key1 == "auto_actions" then
+      local cmd = utils.editbox("Edit " .. key1 .. "." .. key2, "ADB", adb_options[key1][key2])
+      if cmd == nil then return end
+      adb_options[key1][key2] = cmd
+    else
+      local value = utils.inputbox("Edit " .. key1 .. "." .. key2, "ADB", adb_options[key1][key2])
+      if value == nil then return end
+      adb_options[key1][key2] = value
+    end
+  elseif type(adb_options[key1][key2]) == "boolean" then
+    local value = utils.msgbox(key1 .. "." .. key2, "ADB", "yesnocancel", "?", adb_options[key1][key2] and 1 or 2)
+    if value == "cancel" then return end
+    adb_options[key1][key2] = value == "yes"
+  else
+    adbErr("adbOnOptionsEditCommand: Not implemented type " .. type(adb_options[key1][key2]))
+    return
+  end
+
+  adbCheckOptions()
+  adbSaveOptions()
 end
 
 function adbOnOptionsCommand(name, line, wildcards)
@@ -158,31 +240,101 @@ function adbOnOptionsCommand(name, line, wildcards)
   end
 end
 
+function adbPickFormat(msg, default)
+  if default == nil then
+    default = "format.full"
+  end
+
+  local formats = {}
+  for k, _ in pairs(adb_options) do
+    if k:find("^format%.") then
+      formats[k] = k
+    end
+  end
+  local ikey = utils.choose(msg, "ADB", formats, default)
+  return ikey ~= nil and formats[ikey] or ikey
+end
+
 function adbOnFormatAdd(name, line, wildcards)
-  if adb_options[wildcards.old] == nil then
-    adbInfo("Can't copy format from " .. wildcards.old)
+  local format = wildcards.format
+
+  if adb_options[wildcards.newname] ~= nil then
+    adbInfo("Format " .. wildcards.newname .. " already exists.")
     return
   end
-  if adb_options[wildcards.new] == nil then
-    adb_options[wildcards.new] = copytable.deep(adb_options[wildcards.old])
-    adbInfo("Added format " .. wildcards.new)
-  else
-    adbInfo("Format " .. wildcards.new .. " already exists.")
+
+  if adb_options[format] == nil then
+    if format ~= "" then
+      adbInfo("Format " .. format .. " not found.")
+      return
+    else
+      format = adbPickFormat("Choose format to copy setting from")
+      if format == nil then return end
+      assert(adb_options[format])
+    end
   end
+
+  adb_options[wildcards.newname] = copytable.deep(adb_options[format])
+  adbCheckOptions()
+  adbSaveOptions()
+  adbInfo("Added format " .. wildcards.newname)
 end
 
 function adbOnFormatRemove(name, line, wildcards)
-  if adb_options[wildcards.old] ~= nil then
-    if adbGetDefaultOptions()[wildcards.old] ~= nil then
-      adbInfo("Can't remove default format " .. wildcards.old)
+  local format = wildcards.format
+
+  if adb_options[format] == nil then
+    if format ~= "" then
+      adbInfo("Format " .. format .. " not found.")
+      return
     else
-      adb_options[wildcards.old] = nil
-      adbInfo("Removed format " .. wildcards.old)
+      format = adbPickFormat("Choose format to remove")
+      if format == nil then return end
+      assert(adb_options[format])
     end
-  else
-    adbInfo("Format " .. wildcards.old .. " not found.")
   end
+
+  if adbGetDefaultOptions()[format] ~= nil then
+    adbInfo("Can't remove default format " .. format)
+    return
+  end
+
+  adb_options[format] = nil
+  adbCheckOptions()
+  adbSaveOptions()
+  adbInfo("Removed format " .. format)
 end
+
+function adbOnFormatEdit(name, line, wildcards)
+  local format = wildcards.format
+
+  if adb_options[format] == nil then
+    if format ~= "" then
+      adbInfo("Format " .. format .. " not found.")
+      return
+    else
+      format = adbPickFormat("Choose format to edit")
+      if format == nil then return end
+      assert(adb_options[format])
+    end
+  end
+
+  local choices = {}
+  local defaults = {}
+  for k, v in pairs(adb_options[format]) do
+    choices[k] = adb_options_description.format[k]
+    defaults[k] = v
+  end
+  local selection = utils.multilistbox("Select " .. format .. " options (use ctrl to select multiple items)", "ADB", choices, defaults)
+  if selection == nil then return end
+
+  for k, _ in pairs(adb_options[format]) do
+    adb_options[format][k] = selection[k] ~= nil and selection[k] or false
+  end
+  adbCheckOptions()
+  adbSaveOptions()
+end
+
 ------ recent cache ------
 local adb_recent_cache = {version = 1.0}
 

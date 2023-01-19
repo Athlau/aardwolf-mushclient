@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.002"
+   version="1.003"
    >
 <description trim="y">
 <![CDATA[
@@ -54,10 +54,11 @@
                        using format specified in identify_channel_format
  @Waid sword worn t Sletch format.full@w - spam Sletch with full details :P
 
-@Wadb options [set <group> <option> [value]]@w
+@Wadb options [edit|reset|set <group> <option> [value]]@w
  This command shows or changes ADB options.
  Examples:
  @Wadb options@w - show current options
+ @Wadb options edit@w - edit options
  @Wadb options reset@w - reset options to defaults.
  @Wadb options set format.full flags false@w - don't show flags in format.full
  @Wadb options set cockpit show_db_updates false@w - don't show DB update messages
@@ -115,19 +116,26 @@
    TODO: more details on format, add format add/remove commands.
    For now you can check options under "format.brief" and "format.full"
 
-@Wadb format add <format.newname> <existing name>@w - adds new output format with specified <new name>
+@Wadb format add format.<newname> [<existing name>]@w - adds new output format with specified <new name>
   and copies settings from existing format. After adding a format you can change it's settings
   via @Wadb options set <format.newname> <setting> <value>@w
-  For example: adb format add format.mine format.brief
-@Wadb format remove <existing name>@w - remove existing output format
-  For example: adb format remove format.mine
+  or @Wadb format edit@w command.
+  For example: adb format add format.mine
+@Wadb format remove [<existing name>]@w - remove existing output format
+  For example: adb format remove
+               adn format remove format.mine
+@Wadb format edit [<existing name>]@w - edit existing format
+  For example: adb format edit
 
 @Wadb [off|on]@w - disable or enable auto actions.
   It's the same as typing longer command:
   @Wasb options set cockpit enable_auto_actions [false|true]@w
 
- TODO: write more examples here and explain different options...
-@R---------------------------------------------------------------------------------
+@MChangelog@w:
+  1.003
+  @Wadb format add/remove/edit
+  @Wadb options edit
+ @R---------------------------------------------------------------------------------
 ]]>
 </description>
 
@@ -261,6 +269,15 @@
   >
   </alias>
   <alias
+   script="adbOnOptionsEditCommand"
+   match="^adb options edit$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
    match="^adb off$"
    regexp="y"
    enabled="y"
@@ -281,7 +298,7 @@
 
   <alias
    script="adbOnFormatAdd"
-   match="^adb format add (?<new>format\..+) (?<old>format\..+)$"
+   match="^adb format add (?<newname>format\..+)(?: (?<format>format\..+))?$"
    regexp="y"
    enabled="y"
    send_to="12"
@@ -291,7 +308,7 @@
 
   <alias
    script="adbOnFormatRemove"
-   match="^adb format remove (?<old>format\..+)$"
+   match="^adb format remove(?: (?<format>format\..+))?$"
    regexp="y"
    enabled="y"
    send_to="12"
@@ -299,6 +316,15 @@
   >
   </alias>
 
+  <alias
+   script="adbOnFormatEdit"
+   match="^adb format edit(?: (?<format>format\..+))?$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
 </aliases>
 
 <!--  Script  -->
