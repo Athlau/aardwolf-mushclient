@@ -14,7 +14,8 @@ function adbGetDefaultOptions()
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
       on_normal_looted_cmd = "echo could have done \"put %item bag\" here",
-      on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then Send(\"drop %item\") else Send(\"put %item 2785187925\") end",
+      on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then " ..
+                                "Send(\"drop %item\") else Send(\"put %item 2785187925\") end",
     },
     cockpit = {
       update_db_on_loot = true,
@@ -452,8 +453,9 @@ end
 
 function adbDrainIdResultsReadyCB(item, ctx)
   if ctx.drain_inv_item.id ~= item.stats.id then
-    adbErr("adbDrainIdResultsReadyCB -> something is off expected id "..tostring(ctx.drain_inv_item.id)..
-           "!= "..tostring(item.stats.id))
+    adbInfo("adbDrainIdResultsReadyCB -> something is off! Expected id "..tostring(ctx.drain_inv_item.id) ..
+           " but got " .. tostring(item.stats.id) ..
+           ". Did you throw away [" .. ctx.drain_loot_item.name .. "] already?")
     adbDrainOne()
     return
   end
