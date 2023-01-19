@@ -1065,8 +1065,12 @@ function adbOnBlootNameTrigger(name, line, wildcards, styles)
     bloot = bloot .. " <<" .. tostring(bloot_lvl) .. ">>"
   end
   local colored_line = StylesToColours(styles)
-  color_line = colored_line:gsub("%((@[%a%d]+)" .. wildcards.bloot, "%(%1" .. bloot, 1)
-  AnsiNote(ColoursToANSI(color_line))
+  local changed_line = colored_line:gsub("%((@[%a%d]+)" .. wildcards.bloot, "%(%1" .. bloot, 1)
+  -- While dinv is doing refresh this triggers without proper styles,
+  -- just ignore this line as dinv intention is to hide it anyways.
+  if colored_line ~= changed_line then
+    AnsiNote(ColoursToANSI(changed_line))
+  end
 end
 
 ------ Debug ------
