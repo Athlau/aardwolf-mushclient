@@ -709,6 +709,11 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
     return
   end
 
+  -- don't record looting items from the corpse of yourself :P
+  if wildcards.mob == gmcp("char.base.name") then
+    return
+  end
+
   local color_name, color_mob
   local colored_line = StylesToColours(styles)
   adbDebug("adbOnItemLootedTrigger colored_line: "..colored_line, 5)
