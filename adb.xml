@@ -75,6 +75,7 @@
 
 @Ccockpit@W options@w
  Those could be set via @Wadb options set cockpit <options> <value>@w:
+
  @Wenable_auto_actions <true|false>@w - enables or disables auto actions.
    Those actions from @Cauto_actions@w group are executed when you loot an item.
    @mon_normal_looted_lua@w - lua script, executed when you loot normal - not bloot item.
@@ -106,12 +107,17 @@
 
  @Widentify_command@w - command to use for item identification. Default's to "id",
    @rNot implemented@w
+
  @Wupdate_db_on_loot <true|false>@w   - update DB with looted items.
+
  @Wshow_db_updates <true|false>@w     - show/hide information when new items are adeed to DB.
+
  @Wshow_db_cache_hits <true|false>@w  - show/hide DB cache hit messages.
+
  @Wcache_added_format <format.name>@w - item ID output format used to display new items.
-   For now it's either @Gformat.full@w or @Gformat.brief@w
+
  @Widentify_format@w - default "aid" output format when channel is not specifief.
+
  @Widentify_channel_format@w - default "aid" output format when sending to a channel.
    TODO: more details on format, add format add/remove commands.
    For now you can check options under "format.brief" and "format.full"
@@ -121,9 +127,11 @@
   via @Wadb options set <format.newname> <setting> <value>@w
   or @Wadb format edit@w command.
   For example: adb format add format.mine
+
 @Wadb format remove [<existing name>]@w - remove existing output format
   For example: adb format remove
                adn format remove format.mine
+
 @Wadb format edit [<existing name>]@w - edit existing format
   For example: adb format edit
 
