@@ -414,7 +414,7 @@ function adbReplacePatterns(cmd, id, bloot, base_item, lua)
   cmd = cmd:gsub("%%%f[%a]" .. "item" .. "%f[%A]", id)
   cmd = cmd:gsub("%%%f[%a]" .."bloot" .. "%f[%A]", bloot)
 
-  local gpp = base_item.stats.worth == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
+  local gpp = base_item.stats.weight == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
   cmd = cmd:gsub("%%%f[%a]" .."gpp" .. "%f[%A]", gpp)
 
   adbDebug("replaced cmd:" .. cmd, 2)
