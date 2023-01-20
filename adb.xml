@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.003"
+   version="1.004"
    >
 <description trim="y">
 <![CDATA[
@@ -139,10 +139,14 @@
   It's the same as typing longer command:
   @Wasb options set cockpit enable_auto_actions [false|true]@w
 
+TODO: move changelog to separate entry
 @MChangelog@w:
   1.003
-  @Wadb format add/remove/edit
-  @Wadb options edit
+  Added @Wadb format add/remove/edit
+  Added @Wadb options edit
+  1.004
+  Don't update db when looting your own corpse.
+  Fix 0 weight items check.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
