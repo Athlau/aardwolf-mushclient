@@ -188,7 +188,7 @@ TODO: move changelog to separate entry
   <!-- Making sure that multiline crumble trigger fires after the item looted trigger. -->
   <trigger
    enabled="n"
-   match="^You get (?:(?<gold>[0-9,]+) gold coins|(?:(?<count>\d+) \* )?(?<item>.*)) from the(?: \w+)? corpse of (?<mob>.*)\.$"
+   match="^You get (?:(?<gold>[0-9,]+) gold coins?|(?:(?<count>\d+) \* )?(?<item>.*)) from the(?: \w+)? corpse of (?<mob>.*)\.$"
    regexp="y"
    send_to="12"
    sequence="100"
