@@ -706,11 +706,13 @@ end
 function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   -- don't care about gold
   if wildcards.gold ~= "" then
+    adbDebug("adbOnItemLootedTrigger ignoring gold: " .. wildcards.gold, 5)
     return
   end
 
   -- don't record looting items from the corpse of yourself :P
   if wildcards.mob == gmcp("char.base.name") then
+    adbDebug("adbOnItemLootedTrigger ignoring your own corpse: " .. wildcards.mob, 5)
     return
   end
 
