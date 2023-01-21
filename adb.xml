@@ -200,7 +200,7 @@ TODO: move changelog to separate entry
 
   <trigger
    enabled="n"
-   match="^You get (?<item>.*) from the \w+ corpse of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
+   match="^You get (?<item>.*) from the(?: \w+)? corpse of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
    regexp="y"
    send_to="12"
    sequence="100"

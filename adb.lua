@@ -731,7 +731,8 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
       return
     end
   end
-  name_end = colored_line:find("@w from the %a+ corpse of ") or colored_line:find(" from the %a+ corpse of ")
+  local name_end_pattern = " from the ?%a* corpse of "
+  name_end = colored_line:find("@w" .. name_end_pattern) or colored_line:find(name_end_pattern)
   if name_end == nil then
     adbErr("Can't parse name end: ["..colored_line.."]")
     return
@@ -739,9 +740,9 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   color_name = colored_line:sub(name_start + 1, name_end - 1)
 
   local mob_start, mob_end
-  _, mob_start = colored_line:find("@w from the %a+ corpse of ")
+  _, mob_start = colored_line:find("@w" .. name_end_pattern)
   if mob_start == nil then
-    _, mob_start = colored_line:find(" from the %a+ corpse of ")
+    _, mob_start = colored_line:find(name_end_pattern)
     if mob_start == nil then
       adbErr("Can't parse mob start: ["..colored_line.."]")
       return
