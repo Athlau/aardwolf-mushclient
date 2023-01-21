@@ -627,6 +627,12 @@ end
 
 function adbLootedStackRemoveLast(name)
   adbDebug("adbLootedStackRemoveLast "..name, 5)
+
+  if #adb_looted_stack == 0 then
+    adbDebug("adbLootedStackRemoveLast unexpected? #adb_looted_stack == 0", 1)
+    return
+  end
+
   if adb_looted_stack[#adb_looted_stack].name == name then
     table.remove(adb_looted_stack)
    else
@@ -683,6 +689,11 @@ function adbLootedStackPush(item)
 end
 
 function adbInvitemStackRemoveLast(name)
+  if (#adb_looted_stack == 0) then
+    adbDebug("adbInvitemStackRemoveLast unexpected? #adb_looted_stack == 0", 1)
+    return
+  end
+
   -- {invitem} message comes before the actual loot message, so we can't just assume the last entry is the one
   -- we need to remove.
   -- Also, there could be other {invitem} elements from untracked sources.
@@ -731,7 +742,7 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
       return
     end
   end
-  local name_end_pattern = " from the ?%a* corpse of "
+  local name_end_pattern = " from the ?%a* ?%a* corpse of "
   name_end = colored_line:find("@w" .. name_end_pattern) or colored_line:find(name_end_pattern)
   if name_end == nil then
     adbErr("Can't parse name end: ["..colored_line.."]")
@@ -767,10 +778,15 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   for i = 1, wildcards.count ~= "" and tonumber(wildcards.count) or 1, 1 do
     adbLootedStackPush(copytable.deep(t))
   end
+
+  -- one shotted mob without getting gmcp in combat state
+  if gmcp("char.status.state") == "3" and not was_in_combat then
+    adbDrainOne()
+  end
 end
 
 function adbOnItemLootedCrumblesTrigger(name, line, wildcards)
-  adbDebug("adbOnItemLootedCrumblesTrigger "..name, 5)
+  adbDebug("adbOnItemLootedCrumblesTrigger " .. line, 5)
   adbInvitemStackRemoveLast(wildcards.item)
   adbLootedStackRemoveLast(wildcards.item) 
 end
@@ -1267,13 +1283,13 @@ function adbInfo(message)
   ColourNote("blue", "white", "ADB: " .. message)
 end
 ------ Plugin Callbacks ------
-local was_in_combat = false
+was_in_combat = false
 function OnPluginBroadcast(msg, id, name, text)
   if (id == '3e7dedbe37e44942dd46d264') then   
     if (text == "char.status") then
       -- 3 - Player fully active and able to receive MUD commands
       -- 8 - Player in combat
-      state = gmcp("char.status.state")
+      local state = gmcp("char.status.state")
       if state == "8" then
         if not was_in_combat then adbDebug("-> in combat", 4) end
         was_in_combat = true

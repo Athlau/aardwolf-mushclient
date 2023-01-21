@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.004"
+   version="1.005"
    >
 <description trim="y">
 <![CDATA[
@@ -148,6 +148,9 @@ TODO: move changelog to separate entry
   Don't update db when looting your own corpse.
   Fix 0 weight items check.
   Fix loot trigger for corpses without adjectives.
+  1.005
+  Fix for loot from from double adjective corpses.
+  Process items if mob was one-shotted.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -188,10 +191,10 @@ TODO: move changelog to separate entry
   <!-- Making sure that multiline crumble trigger fires after the item looted trigger. -->
   <trigger
    enabled="n"
-   match="^You get (?:(?<gold>[0-9,]+) gold coins?|(?:(?<count>\d+) \* )?(?<item>.*)) from the(?: \w+)? corpse of (?<mob>.*)\.$"
+   match="^You get (?:(?<gold>[0-9,]+) gold coins?|(?:(?<count>\d+) \* )?(?<item>.*)) from the(?:[ \w]+)?(?:[ \w]+)? corpse of (?<mob>.*)\.$"
    regexp="y"
    send_to="12"
-   sequence="100"
+   sequence="10"
    keep_evaluating="y"
    group="adbLootTriggerGroup"
    script="adbOnItemLootedTrigger"
@@ -200,7 +203,7 @@ TODO: move changelog to separate entry
 
   <trigger
    enabled="n"
-   match="^You get (?<item>.*) from the(?: \w+)? corpse of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
+   match="^You get (?<item>.*) from the(?: \w+)?(?: \w+)? corpse of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
    regexp="y"
    send_to="12"
    sequence="100"
