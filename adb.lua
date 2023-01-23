@@ -32,7 +32,7 @@ local adb_options_description = {
 
 function adbGetDefaultOptions()
   local default_options = {
-    version = 1.001,
+    version = "1.002",
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
@@ -50,6 +50,7 @@ function adbGetDefaultOptions()
       identify_format = "format.full",
       identify_channel_format = "format.brief",
       cache_added_format = "format.full",
+      max_cache_size = 500,
     },
     colors = {
       default = "@D",
@@ -114,9 +115,18 @@ function adbCheckOptions()
     adb_options["format.brief"].sections_name_newline = false
   end
 
+  if adb_options.version == 1.001 then
+    adb_options.version = "1.002"
+    adb_options.cockpit.max_cache_size = adbGetDefaultOptions().cockpit.max_cache_size
+  end
+
   if adb_options.version ~= adbGetDefaultOptions().version then
     adbInfo("ADB options stored are too old, resetting to defaults!")
     adb_options = copytable.deep(adbGetDefaultOptions())
+  end
+
+  if adb_options.cockpit.max_cache_size <= 0 then
+    adb_options.cockpit.max_cache_size = adbGetDefaultOptions().cockpit.max_cache_size
   end
 
   EnableTrigger("adbBlootNameTrigger", adb_options.cockpit.show_bloot_level)
@@ -189,6 +199,15 @@ function adbOnOptionsEditCommand(name, line, wildcards)
     local value = utils.msgbox(key1 .. "." .. key2, "ADB", "yesnocancel", "?", adb_options[key1][key2] and 1 or 2)
     if value == "cancel" then return end
     adb_options[key1][key2] = value == "yes"
+  elseif type(adb_options[key1][key2]) == "number" then
+    local value = utils.inputbox("Edit " .. key1 .. "." .. key2, "ADB", adb_options[key1][key2])
+    if value == nil then return end
+    if not tonumber(value) then
+      adbInfo("Value " .. value .. " is not a number")
+      return
+    else
+      adb_options[key1][key2] = tonumber(value)
+    end
   else
     adbErr("adbOnOptionsEditCommand: Not implemented type " .. type(adb_options[key1][key2]))
     return
@@ -336,24 +355,101 @@ function adbOnFormatEdit(name, line, wildcards)
 end
 
 ------ recent cache ------
-local adb_recent_cache = {version = 1.0}
+local adb_latest_cache_version = "1.02"
+local adb_recent_cache = {
+  meta = {
+    version = adb_latest_cache_version,
+    count = 0,
+  },
+}
+
+function adbOnAdbDebugCacheClear()
+  adbCacheShrink(true)
+end
+
+function adbCacheShrink(force_full_clear)
+  adbDebug("adbCacheShrink", 2)
+  if not force_full_clear and (adb_recent_cache.meta.count <= adb_options.cockpit.max_cache_size) then
+    return
+  end
+
+  local keys = {}
+  table.foreach(adb_recent_cache, function(k, v)
+    if k ~= "meta" then
+      assert(k ~= nil)
+      table.insert(keys, k)
+    end
+  end)
+
+  assert(adb_recent_cache.meta.count == #keys)
+
+  table.sort(keys, function (key1, key2)
+    return adb_recent_cache[key1].cache.timestamp < adb_recent_cache[key2].cache.timestamp
+  end)
+
+  for i = #keys, force_full_clear and 1 or (adb_options.cockpit.max_cache_size + 1), -1 do
+    local item = adb_recent_cache[keys[i]]
+    if item.cache.new then
+      adbDbAddItem(item)
+    elseif item.cache.dirty then
+      adbDbUpdateItem(item)
+    end
+    adb_recent_cache[keys[i]] = nil
+    adb_recent_cache.meta.count = adb_recent_cache.meta.count - 1
+  end
+end
 
 function adbCacheSave()
+  adbCacheShrink()
   var.recent_cache = serialize.save_simple(adb_recent_cache)
 end
 
 function adbCacheLoad()
-  if var.recent_cache ~= nil then
-    adb_recent_cache = loadstring("return " .. var.recent_cache)()
-    adbInfo("Loaded cache version " .. adb_recent_cache.version)
-    adbDebug(function()
-      local count = 0
-      for _, _ in pairs(adb_recent_cache) do
-        count = count + 1
-      end
-      Note(tostring(count - 1) .. " items in cache.")
-    end, 1)
+  if var.recent_cache == nil then
+    return
   end
+
+  adb_recent_cache = loadstring("return " .. var.recent_cache)()
+
+  if adb_recent_cache.meta == nil then
+    adbInfo("Updating cache to version 1.01")
+    assert(adb_recent_cache.version == 1.0)
+    adb_recent_cache.version = nil
+    adb_recent_cache.meta = {
+      version = 1.01,
+      count = 0,
+    }
+    local count = 0
+    for k, v in pairs(adb_recent_cache) do
+      if k ~= "meta" then
+        count = count + 1
+        v.cache = {
+          new = true,
+          dirty = false,
+          timestamp = os.time(),
+        }
+      end
+    end
+    adb_recent_cache.meta.count = count
+    adbInfo("Finished")
+  end
+
+  if adb_recent_cache.meta.version == 1.01 then
+    adbInfo("Updating cache to version 1.02")
+    adb_recent_cache.meta.version = "1.02"
+  end
+
+  if adb_recent_cache.meta.version ~= adb_latest_cache_version then
+    adbInfo("Cache version " .. adb_recent_cache.version .. " is too old, clearing cache")
+    adb_recent_cache = {
+      meta = {
+        version = adb_latest_cache_version,
+        count = 0,
+      }
+    }
+  end
+
+  adbDebug("Cache version " .. adb_recent_cache.meta.version .. " contains " .. adb_recent_cache.meta.count .. " item(s).", 1)
 end
 
 function adbCacheGetKey(name, zone)
@@ -361,34 +457,74 @@ function adbCacheGetKey(name, zone)
 end
 
 function adbCacheGetItem(color_name, zone)
-  return adb_recent_cache[adbCacheGetKey(color_name, zone)]
+  local result = adb_recent_cache[adbCacheGetKey(color_name, zone)]
+
+  if result == nil then
+    result = adbDbGetItem(color_name, zone)
+    if result then adbCacheAdd(result, true) end
+  end
+
+  if result ~= nil then
+    result.cache.timestamp = os.time()
+  end
+  return result
 end
 
-function adbCacheGetItemByName(color_name)
+function adbCacheGetItemByNameAndFoundAt(color_name, found_at)
+  local result = nil
   for k, v in pairs(adb_recent_cache) do
-    if type(v) ~= "table" then
-      -- skip version field
-    elseif v.colorName == color_name then
-      return v
+    if k == "meta" then
+      -- skip meta field
+    elseif v.colorName == color_name and v.stats.foundat == found_at then
+      result = v
+      break
     end
   end
-  return nil
+
+  if result == nil then
+    result = adbDbGetItemByNameAndFoundAt(color_name, found_at)
+    if result then adbCacheAdd(result, true) end
+  end
+
+  if result ~= nil then
+    result.cache.timestamp = os.time()
+  end
+  return result
 end
 
-function adbCacheAdd(item)
+function adbCacheAdd(item, skip_cache_search)
   local key = adbCacheGetKey(item.colorName, item.location.zone)
-  local cache_item = adbCacheGetItem(item.colorName, item.location.zone)
+  local cache_item = nil
+  if not skip_cache_search then
+    local cache_item = adbCacheGetItem(item.colorName, item.location.zone)
+  end
   if cache_item == nil then
-    --TODO: limit cache size, evict oldest etc
+    if item.cache == nil then
+      item.cache = {
+        new = true,
+        dirty = false,
+        timestamp = os.time(),
+      }
+    end
+    if not adb_recent_cache[key] then
+      adb_recent_cache.meta.count = adb_recent_cache.meta.count + 1
+    end
     adb_recent_cache[key] = item
     adbDebug("Added to cache:", 3)
     adbDebugTprint(item, 3)
     if adb_options.cockpit.show_db_updates then
-      AnsiNote(ColoursToANSI("@CADB added to cache:\n" .. adbIdReportGetItemString(item, adb_options[adb_options.cockpit.cache_added_format])))
+      if not skip_cache_search then
+        AnsiNote(ColoursToANSI("@CADB added to cache:\n" .. adbIdReportGetItemString(item, adb_options[adb_options.cockpit.cache_added_format])))
+      else
+        adbDebug(function()
+          AnsiNote(ColoursToANSI("@CADB loaded to cache from db:\n" .. adbIdReportGetItemString(item, adb_options[adb_options.cockpit.cache_added_format])))
+        end, 1)
+      end
     end
+    adbCacheShrink()
   else
-    adbDebug(item.colorName.." already in cache, todo: update timestamp", 3)
-    --TODO update timestamp etc
+    adbDebug(item.colorName.." already in cache, updated timestamp", 3)
+    cache_item.cache.timestamp = os.time()
     if adb_options.cockpit.show_db_updates then
       AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("@CADB updated cache item " .. cache_item.colorName .. "@C :", cache_item.location)))
     end
@@ -543,6 +679,7 @@ function adbDrainOne()
     -- TODO update timestamp?
     adbDebugTprint(cache_item, 4)
     if old_location ~= new_location then
+      cache_item.cache.dirty = true
       if adb_options.cockpit.show_db_updates then
         AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("@CADB updated cache item @w[" .. cache_item.colorName .. "@w] @C:", cache_item.location)))
       end
@@ -734,9 +871,9 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   -- it seems that sometimes there's leftover color code from previous line
   -- at least I saw "@x248You get @Rminotaur clan @x069markings@w..."
   local name_start, name_end
-  _, name_start = colored_line:find("^@[%a%d]+You get %d+ %* ") 
+  _, name_start = colored_line:find("^@?[%a%d]*You get %d+ %* ")
   if name_start == nil then 
-    _, name_start = colored_line:find("^@[%a%d]+You get ")
+    _, name_start = colored_line:find("^@?[%a%d]*You get ")
     if name_start == nil then
       adbErr("Can't parse name start: ["..colored_line.."]")
       return
@@ -792,7 +929,7 @@ function adbOnItemLootedCrumblesTrigger(name, line, wildcards)
 end
 
 function adbOnInvitemTrigger(name, line, wildcards)
-  adbDebug("invitem " .. line, 5)
+  adbDebug("invitem " .. line, 1)
   local t = {
     id = tonumber(wildcards.id),
     name = wildcards.item,
@@ -812,7 +949,8 @@ function adbOnAdbDebugDump()
   tprint(adb_invitem_stack)
   Note("looted stack:")
   tprint(adb_looted_stack)
-  --Note("recent cache:")
+  Note("recent cache:")
+  print(adb_recent_cache.meta.count .. " entries")
   --tprint(adb_recent_cache)
   Note("-------------------------------------")
 end
@@ -851,7 +989,7 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj, ctx)
   if ctx.format.location or ctx.format.bloot_diffs then
     local bloot = adbGetBlootLevel(obj.stats.name)
     local base_name = adbGetBaseColorName(obj.colorName)
-    local base_item = adbCacheGetItemByName(base_name)
+    local base_item = adbCacheGetItemByNameAndFoundAt(base_name, obj.stats.foundat)
     if base_item ~= nil then
       if ctx.format.bloot_diffs and bloot > 0 then
         local diff = adbDiffItems(base_item, obj, true)
@@ -1249,6 +1387,456 @@ function adbOnBlootNameTrigger(name, line, wildcards, styles)
   end
 end
 
+------ DB ------
+adb_db_filename = "adb.db"
+adb_db_version = 1
+adb_db = nil
+
+function adbDbMakeItemFromRow(row)
+  adbDebug("adbDbMakeItemFromRow", 2)
+  adbDebugTprint(row, 2)
+
+  local result = {
+    stats = {},
+    cache = {
+      rowid = row.dbid,
+      new = false,
+      dirty = false,
+      timestamp = os.time(),
+    },
+    location = {
+      zone = row.zone,
+      mobs = {},
+    },
+    enchants = {},
+    colorName = row.colorName,
+    comment = row.comment,
+    identifyLevel = row.identifyLevel,
+  }
+
+  for k, v in pairs(row) do
+    if k ~= "dbid" and k ~= "colorName" and k ~= "zone" and
+       k ~= "comment" and k ~= "identifyLevel" and not k:find("^spell%d") then
+      result.stats[k:lower()] = v
+    end
+  end
+
+  if row["spells1name"] then
+    result.stats.spells = {}
+  end
+  for i = 1, 4, 1 do
+    if row["spells" .. i .. "name"] then
+      local spell = {
+        level = row["spells" .. i .. "level"],
+        count = row["spells" .. i .. "count"],
+        name = row["spells" .. i .. "name"],
+      }
+      table.insert(result.stats.spells, spell)
+    end
+  end
+
+  local sql = string.format([[
+    SELECT mobs.* from item_mobs
+    INNER JOIN mobs on mobs.dbid = item_mobs.mob_dbid
+    WHERE item_dbid = %d;
+  ]], row.dbid)
+
+  for mob_row in adbDbNrowsExec(sql) do
+    local mob = {
+      name = mob_row.name,
+      colorName = mob_row.colorName,
+      rooms = mob_row.rooms,
+      zone = mob_row.zone,
+      rowid = mob_row.dbid,
+    }
+    adbItemLocationAddMob(result, mob)
+  end
+
+  adbDebug("Resulting item:", 2)
+  adbDebugTprint(result, 2)
+  return result
+end
+
+function adbDbGetItem(color_name, zone)
+  local result = nil
+  local sql = string.format("SELECT * FROM items WHERE zone = %s AND colorName = %s;",
+                            adbSqlTextValue(zone), adbSqlTextValue(color_name))
+  for row in adbDbNrowsExec(sql) do
+    if result ~= nil then
+      adbDebug("Got more than one row!", 1)
+      adbDebugTprint(row, 1)
+    end
+    result = adbDbMakeItemFromRow(row)
+  end
+  return result
+end
+
+function adbDbGetItemByNameAndFoundAt(color_name, found_at)
+  assert(color_name ~= nil and found_at ~= nil)
+
+  local result = nil
+  local sql = string.format("SELECT * FROM items WHERE foundAt = %s AND colorName = %s;",
+                            adbSqlTextValue(found_at), adbSqlTextValue(color_name))
+  for row in adbDbNrowsExec(sql) do
+    if result ~= nil then
+      adbDebug("Got more than one row!", 1)
+      adbDebugTprint(row, 1)
+      break
+    end
+    result = adbDbMakeItemFromRow(row)
+  end
+  return result
+end
+
+function trim(s)
+  return s:gsub("^%s*(.-)%s*$", "%1")
+end
+
+-- DB exec functions are borrowed from aard_GMCP_mapper.xml
+function adbDbCheck(code, msg, query)
+  if code ~= sqlite3.OK and    -- no error
+     code ~= sqlite3.ROW and   -- completed OK with another row of data
+     code ~= sqlite3.DONE then -- completed OK, no more rows
+        local err = msg.."\n\nCODE: "..code.."\nQUERY: "..query.."\n"
+        adb_db:exec("ROLLBACK")  -- rollback any transaction to unlock the database
+        error(err, 3)            -- show error in caller's context
+  end -- if
+end -- dbcheck
+
+adb_db_max_retries = 10
+adb_db_sleep_duration = 1
+function adbDbCheckExecute(query)
+  local code = adb_db:exec(query)
+  local count = 0
+  while ((code == sqlite3.BUSY) or (code == sqlite3.LOCKED)) and (count < adb_db_max_retries) do
+    adbInfo(string.format("DB ERROR: %s. Retrying %d times: `%s`", adb_db:errmsg():upper(), adb_db_max_retries, query))
+    adb_db:exec("ROLLBACK")
+     local socket = require "socket"
+     socket.sleep(adb_db_sleep_duration)
+     code = adb_db:exec(query)
+     count = count + 1
+  end
+
+  if (not adbDbCheck(code, adb_db:errmsg(), query)) and (count > 0) then
+     adbInfo("Succeded after retry: " .. query)
+  end
+end
+
+function adbDbNrowsExec(query)
+  local ok, iter, vm, i = pcall(adb_db.nrows, adb_db, query)
+
+  local count = 0
+  while (not ok) and (count < adb_db_max_retries) do
+     local code = adb_db:errcode()
+     adbInfo(string.format("DB ERROR: %s. Retrying %d times: `%s`", adb_db:errmsg():upper(), adb_db_max_retries, query))
+     if (code ~= sqlite3.BUSY) and (code ~= sqlite3.LOCKED) then
+        break
+     end
+     adb_db:exec("ROLLBACK")
+     local socket = require "socket"
+     socket.sleep(adb_db_sleep_duration)
+     ok, iter, vm, i = pcall(adb_db.nrows, adb_db, query)
+     count = count + 1
+  end
+
+  if (not adbDbCheck(adb_db:errcode(), adb_db:errmsg(), query)) and (count > 0) then
+    adbInfo("Succeded after retry: " .. query)
+  end
+
+  local function itwrap(vm, i)
+     retval = iter(vm, i)
+     if not retval then
+        return nil
+     end
+     return retval
+  end
+  return itwrap, vm, i
+end
+
+function adbSqlTextValue(value)
+  local res = value:gsub("'", "''")
+  return "'" .. res .. "'"
+end
+
+function adbDbAddItem(item)
+  --INSERT INTO zones (name)
+  local sql = [[
+    BEGIN TRANSACTION;
+    INSERT INTO items (zone, colorName
+  ]]
+  if item.comment then
+    sql = sql .. ", comment"
+  end
+  if item.identifyLevel then
+    sql = sql .. ", identifyLevel"
+  end
+
+  for k, v in pairs(item.stats) do
+    if type(v) ~= "table" then
+      sql = sql .. ", " .. k
+    end
+  end
+  if item.stats.spells then
+    if #item.stats.spells > 4 then
+      adbErr("adbDbAddItem #item.stats.spells = " .. #item.stats.spells)
+    end
+    -- 4 spells only ... too lazy to add another table
+    for i = 1, 4, 1 do
+      if item.stats.spells[i] then
+        sql = sql .. ", spells" .. i .. "level"
+        sql = sql .. ", spells" .. i .. "count"
+        sql = sql .. ", spells" .. i .. "name"
+      end
+    end
+  end
+
+  sql = sql .. [[
+    ) VALUES (
+  ]]
+  sql = sql .. adbSqlTextValue(item.location.zone) .. ", "
+  sql = sql .. adbSqlTextValue(item.colorName)
+  if item.comment then
+    sql = sql .. ", " .. adbSqlTextValue(item.comment)
+  end
+  if item.identifyLevel then
+    sql = sql .. ", " .. adbSqlTextValue(item.identifyLevel)
+  end
+
+  for k, v in pairs(item.stats) do
+    if type(v) ~= "table" then
+      sql = sql .. ",\r\n" .. (type(v) == "string" and adbSqlTextValue(v) or tostring(v))
+    elseif k == "spells" then
+      -- intentionally left empty
+    else
+      adbErr("Unexpected table in item stats: " .. k)
+    end
+  end
+  if item.stats.spells then
+    for i = 1, 4, 1 do
+      if item.stats.spells[i] then
+        sql = sql .. ",\r\n" .. item.stats.spells[i].level
+        sql = sql .. ",\r\n" .. item.stats.spells[i].count
+        sql = sql .. ",\r\n" .. adbSqlTextValue(item.stats.spells[i].name)
+      end
+    end
+  end
+  sql = sql .. ");"
+
+  adbDbCheckExecute(sql)
+  item.cache.rowid = adb_db:last_insert_rowid()
+
+  if item.location.mobs ~= nil then
+    for k, v in pairs(item.location.mobs) do
+      sql = string.format("INSERT INTO mobs (colorName, name, zone, rooms) VALUES(%s, %s, %s, %s);",
+                          adbSqlTextValue(v.colorName), adbSqlTextValue(v.name), adbSqlTextValue(v.zone), adbSqlTextValue(v.rooms))
+      adbDbCheckExecute(sql)
+      v.rowid = adb_db:last_insert_rowid()
+
+      sql = string.format("INSERT INTO item_mobs (item_dbid, mob_dbid) VALUES (%d, %d);", item.cache.rowid, v.rowid)
+      adbDbCheckExecute(sql)
+    end
+  end
+
+  adbDbCheckExecute("COMMIT;")
+
+  item.cache.new = false
+  item.cache.dirty = false
+end
+
+function adbDbUpdateItem(item)
+  -- Easiest way is to just delete and add item again
+  -- maybe one day it would be worth to try doing real update,
+  -- but it's complicated with potentially removed mobs etc.
+
+  adbDbCheckExecute("DELETE FROM items WHERE dbid = " .. item.cache.rowid .. ";")
+  adbDbAddItem(item)
+end
+
+function adbDbSyncCache()
+  adbInfo("Syncing " .. adb_recent_cache.meta.count .. " cache items with db.")
+  local add_count = 0
+  local update_count = 0
+  for k, v in pairs(adb_recent_cache) do
+    if k ~= "meta" then
+      if v.cache.new then
+        add_count = add_count + 1
+        adbDbAddItem(v)
+      elseif v.cache.dirty then
+        update_count = update_count + 1
+        --adbDbUpdateItem(v)
+      end
+    end
+  end
+  adbInfo("Sync finished. Added " .. add_count .. " and updated " .. update_count .. " items.")
+end
+
+local adb_inv_stats_text_fields = {
+  name = true,
+  wearable = true,
+  keywords = true,
+  type = true,
+  flags = true,
+  affectMods = true,
+  material = true,
+  foundAt = true,
+  ownedBy = true,
+  clan = true,
+  spells = true,
+  leadsTo = true,
+  inflicts = true,
+  damType = true,
+  weaponType = true,
+  specials = true,
+  location = true,
+}
+
+function adbDbUpdateVersion(version)
+  adbDebug("adbDbUpdateVersion " .. version, 1)
+  if version == 0 then
+    local sql = [[
+      PRAGMA foreign_keys = ON;
+
+      CREATE TABLE IF NOT EXISTS zones (
+        dbid     INTEGER PRIMARY KEY AUTOINCREMENT,
+        name     TEXT NOT NULL,
+        UNIQUE(name)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS zones_name_index ON zones(name);
+
+      CREATE TABLE IF NOT EXISTS items (
+        dbid           INTEGER PRIMARY KEY AUTOINCREMENT,
+        colorName      TEXT NOT NULL,
+        zone           TEXT,
+        comment        TEXT,
+        identifyLevel  TEXT,
+    ]]
+
+    for k, v in pairs(inv.stats) do
+      sql = sql .. "\r\n" .. v.name .. (adb_inv_stats_text_fields[k] and " TEXT," or " INTEGER,")
+    end
+
+    -- 4 spells only ... too lazy to add another table
+    for i = 1, 4, 1 do
+      sql = sql .. "\r\n spells" .. i .. "level INTEGER,"
+      sql = sql .. "\r\n spells" .. i .. "count INTEGER,"
+      sql = sql .. "\r\n spells" .. i .. "name TEXT,"
+    end
+
+    sql = sql .. [[
+
+        FOREIGN KEY(zone) REFERENCES zones (name)
+      );
+      CREATE INDEX IF NOT EXISTS items_colorName_index ON items (colorName);
+      CREATE UNIQUE INDEX IF NOT EXISTS items_zone_colorName_index ON items (zone, colorName);
+      CREATE UNIQUE INDEX IF NOT EXISTS items_foundAt_colorName_index ON items (foundAt, colorName);
+
+      CREATE TRIGGER IF NOT EXISTS items_insert_zone_name_trigger
+        BEFORE INSERT ON items
+        WHEN NOT EXISTS(select 1 from zones where name = NEW.zone)
+      BEGIN
+        INSERT INTO zones (name) VALUES (NEW.zone);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS items_update_zone_name_trigger
+        BEFORE UPDATE ON items
+        WHEN NOT EXISTS(select 1 from zones where name = NEW.zone)
+      BEGIN
+        INSERT INTO zones (name) VALUES (NEW.zone);
+      END;
+
+      CREATE TABLE IF NOT EXISTS mobs (
+        dbid        INTEGER PRIMARY KEY AUTOINCREMENT,
+        colorName   TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        zone        TEXT NOT NULL,
+        rooms       TEXT NOT NULL,
+        FOREIGN KEY(zone) REFERENCES zones (name)
+      );
+
+      CREATE TRIGGER IF NOT EXISTS mobs_insert_zone_name_trigger
+        BEFORE INSERT ON mobs
+        WHEN NOT EXISTS(select 1 from zones where name = NEW.zone)
+      BEGIN
+        INSERT INTO zones (name) VALUES (NEW.zone);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS mobs_update_zone_name_trigger
+        BEFORE UPDATE ON mobs
+        WHEN NOT EXISTS(select 1 from zones where name = NEW.zone)
+      BEGIN
+        INSERT INTO zones (name) VALUES (NEW.zone);
+      END;
+
+      CREATE TABLE IF NOT EXISTS item_mobs (
+        item_dbid      INTEGER,
+        mob_dbid       INTEGER,
+        PRIMARY KEY (item_dbid, mob_dbid),
+        FOREIGN KEY (item_dbid) REFERENCES items (dbid)
+          ON DELETE CASCADE ON UPDATE NO ACTION,
+        FOREIGN KEY (mob_dbid) REFERENCES mobs (dbid)
+          ON DELETE CASCADE ON UPDATE NO ACTION
+      );
+
+      CREATE TRIGGER IF NOT EXISTS item_mobs_delete_trigger
+      AFTER DELETE ON item_mobs
+      BEGIN
+        DELETE FROM mobs WHERE dbid = OLD.mob_dbid;
+      END;
+
+      PRAGMA user_version = 1;
+    ]]
+    adbDbCheckExecute(sql)
+    version = 1
+  end
+end
+
+function adbDbOpen()
+  adbDebug("adbDbOpen", 1)
+  local filename = GetPluginInfo(GetPluginID(), 20) .. adb_db_filename
+  adb_db = assert(sqlite3.open(filename))
+  adb_db:busy_timeout(100)
+  adbInfo("Opened " .. filename)
+end
+
+function adbDbLoad()
+  adbDebug("adbDbLoad", 1)
+  if adb_db ~= nil and adb_db:isopen() then
+    return
+  end
+
+  adbDbOpen()
+
+  adbDbCheckExecute("PRAGMA journal_mode=WAL;")
+  local db_user_version = 0
+  for row in adbDbNrowsExec("PRAGMA user_version") do
+    db_user_version = row.user_version
+  end
+
+  if db_user_version ~= adb_db_version then
+    adbDbUpdateVersion(db_user_version)
+  end
+end
+
+function adbDbSave()
+  adbDebug("adbDbSave", 1)
+  adbDbCheckExecute("PRAGMA wal_checkpoint(FULL);")
+
+  adbDbSyncCache()
+
+  if adb_db:isopen() then
+    adb_db:close()
+    adbDbOpen()
+  end
+end
+
+function adbDbClose()
+  adbDebug("adbDbClose", 1)
+  adbDbCheckExecute("PRAGMA optimize;")
+  if adb_db:isopen() then
+    adb_db:close()
+  end
+end
+
 ------ Debug ------
 local adb_debug_level = 1
 function adbDebug(what, level) 
@@ -1312,13 +1900,20 @@ function OnPluginInstall()
 end
 
 function OnPluginEnable()
-  adbLoadOptions()
-  adbCacheLoad()
+  OnPluginConnect()
 end
 
 function OnPluginConnect()
   adbLoadOptions()
+  adbDbLoad()
   adbCacheLoad()
+end
+
+function OnPluginDisconnect()
+  adbSaveOptions()
+  adbDbSave()
+  adbCacheSave()
+  adbDbClose()
 end
 
 function OnPluginDisable()
@@ -1326,5 +1921,6 @@ end
 
 function OnPluginSaveState()
   adbSaveOptions()
+  adbDbSave()
   adbCacheSave()
 end

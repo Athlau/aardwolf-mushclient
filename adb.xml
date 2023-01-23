@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.005"
+   version="1.006"
    >
 <description trim="y">
 <![CDATA[
@@ -151,6 +151,9 @@ TODO: move changelog to separate entry
   1.005
   Fix for loot from from double adjective corpses.
   Process items if mob was one-shotted.
+  1.006
+  Added sqlite db under cache (check cockpit.max_cache_size option)
+  Fix for loot lines not starting with color codes.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -242,6 +245,15 @@ TODO: move changelog to separate entry
   <alias
    script="adbOnAdbDebugDump"
    match="^adb_debug_dump$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="adbOnAdbDebugCacheClear"
+   match="^adb_debug_cache_clear$"
    regexp="y"
    enabled="y"
    send_to="12"
