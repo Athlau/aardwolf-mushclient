@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.006"
+   version="1.007"
    >
 <description trim="y">
 <![CDATA[
@@ -90,6 +90,7 @@
    @G%item@w - looted item ID.
    @G%bloot@w - bloot level of the item, 0 for "normal" loot.
    @G%gpp@w - item's gold per pount value, worth/weight (checked for division by 0).
+   @G%colorName@w - item's color name
 
    @mon_bloot_looted_lua@w and @mon_bloot_looted_cmd@w are the same as normal actions,
    but are only executed for bonus loot items. In other words %bloot is bigger than 0.
@@ -154,6 +155,11 @@ TODO: move changelog to separate entry
   1.006
   Added sqlite db under cache (check cockpit.max_cache_size option)
   Fix for loot lines not starting with color codes.
+  1.007
+  Fix for clan items which don't have clan instead of foundat field.
+  Add extra debug command
+  Add colorName field to action commands
+  Fix db update on cache sync
  @R---------------------------------------------------------------------------------
 ]]>
 </description>

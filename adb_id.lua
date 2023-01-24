@@ -152,6 +152,14 @@ end
 function inv.items.trigger.itemIdEnd()
   last_enchant = ""
   EnableTrigger(inv.items.trigger.itemIdStatsName, false)
+
+  -- That's a bit of a hack but I'm lazy to
+  -- Add options to print clan field instead of foundat,
+  -- as well as change unique db index to include clan field.
+  if idObject.stats.foundat == nil then
+    idObject.stats.foundat = idObject.stats.clan
+  end
+
   idReadyCallback(copytable.deep(idObject), idContext)
   adb_id_busy = false
   adbIdCheckQueue()
