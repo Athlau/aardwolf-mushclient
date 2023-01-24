@@ -384,7 +384,7 @@ function adbCacheShrink(force_full_clear)
   assert(adb_recent_cache.meta.count == #keys)
 
   table.sort(keys, function (key1, key2)
-    return adb_recent_cache[key1].cache.timestamp < adb_recent_cache[key2].cache.timestamp
+    return adb_recent_cache[key1].cache.timestamp > adb_recent_cache[key2].cache.timestamp
   end)
 
   for i = #keys, force_full_clear and 1 or (adb_options.cockpit.max_cache_size + 1), -1 do
