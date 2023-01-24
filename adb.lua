@@ -872,7 +872,7 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   -- it seems that sometimes there's leftover color code from previous line
   -- at least I saw "@x248You get @Rminotaur clan @x069markings@w..."
   local name_start, name_end
-  _, name_start = colored_line:find("^@?[%a%d]*You get %d+ %* ")
+  _, name_start = colored_line:find("^@?[%a%d]*You get @?[%a%d]*%d+@?[%a%d]* %* ")
   if name_start == nil then 
     _, name_start = colored_line:find("^@?[%a%d]*You get ")
     if name_start == nil then
