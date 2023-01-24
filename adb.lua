@@ -535,7 +535,7 @@ local adb_invitem_stack = {}
 local adb_looted_stack = {}
 
 function adbReplacePatterns(cmd, id, bloot, base_item, lua)
-  adbDebug("adbReplacePatterns:" .. cmd, 2)
+  adbDebug("adbReplacePatterns:" .. cmd, 3)
   for k, v in pairs(base_item.stats) do
     -- we might be getting stats from chached item, so don't use it's id
     if k ~= "id" then
@@ -554,7 +554,7 @@ function adbReplacePatterns(cmd, id, bloot, base_item, lua)
   local gpp = base_item.stats.weight == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
   cmd = cmd:gsub("%%%f[%a]" .."gpp" .. "%f[%A]", gpp)
 
-  adbDebug("replaced cmd:" .. cmd, 2)
+  adbDebug("replaced cmd:" .. cmd, 3)
   return cmd
 end
 
@@ -930,7 +930,7 @@ function adbOnItemLootedCrumblesTrigger(name, line, wildcards)
 end
 
 function adbOnInvitemTrigger(name, line, wildcards)
-  adbDebug("invitem " .. line, 1)
+  adbDebug("invitem " .. line, 2)
   local t = {
     id = tonumber(wildcards.id),
     name = wildcards.item,
@@ -1394,8 +1394,8 @@ adb_db_version = 1
 adb_db = nil
 
 function adbDbMakeItemFromRow(row)
-  adbDebug("adbDbMakeItemFromRow", 2)
-  adbDebugTprint(row, 2)
+  adbDebug("adbDbMakeItemFromRow " .. row.dbid, 2)
+  adbDebugTprint(row, 3)
 
   local result = {
     stats = {},
@@ -1453,12 +1453,15 @@ function adbDbMakeItemFromRow(row)
     adbItemLocationAddMob(result, mob)
   end
 
-  adbDebug("Resulting item:", 2)
-  adbDebugTprint(result, 2)
+  adbDebug("Resulting item:", 3)
+  adbDebugTprint(result, 3)
   return result
 end
 
 function adbDbGetItem(color_name, zone)
+  assert(color_name ~= nil and zone ~= nil)
+  adbDebug("adbDbGetItem [" .. color_name .. "] [".. zone .. "]", 2)
+
   local result = nil
   local sql = string.format("SELECT * FROM items WHERE zone = %s AND colorName = %s;",
                             adbSqlTextValue(zone), adbSqlTextValue(color_name))
@@ -1474,6 +1477,7 @@ end
 
 function adbDbGetItemByNameAndFoundAt(color_name, found_at)
   assert(color_name ~= nil and found_at ~= nil)
+  adbDebug("adbDbGetItemByNameAndFoundAt [" .. color_name .. "] [".. found_at .. "]", 2)
 
   local result = nil
   local sql = string.format("SELECT * FROM items WHERE foundAt = %s AND colorName = %s;",
@@ -1560,7 +1564,8 @@ function adbSqlTextValue(value)
 end
 
 function adbDbAddItem(item)
-  --INSERT INTO zones (name)
+  adbDebug("adbDbAddItem [" .. item.colorName .. "] [".. item.location.zone .. "] [" .. item.stats.foundat .. "]", 2)
+
   local sql = [[
     BEGIN TRANSACTION;
     INSERT INTO items (zone, colorName
@@ -1648,8 +1653,18 @@ function adbDbUpdateItem(item)
   -- Easiest way is to just delete and add item again
   -- maybe one day it would be worth to try doing real update,
   -- but it's complicated with potentially removed mobs etc.
-
+  adbDebug("adbDbUpdateItem [" .. item.cache.rowid .. "] [".. item.colorName .. "] [".. item.location.zone .. "] [" .. item.stats.foundat .. "]", 2)
   adbDbCheckExecute("DELETE FROM items WHERE dbid = " .. item.cache.rowid .. ";")
+
+  -- Sanity check in case cache was screwed up during development
+  if adb_debug_level >= 2 then
+    local dbitem = adbDbGetItem(item.colorName, item.location.zone)
+    if dbitem ~= nil then
+      adbDebug("Item still exists in DB " .. dbitem.cache.rowid)
+      adbDbCheckExecute("DELETE FROM items WHERE dbid = " .. dbitem.cache.rowid .. ";")
+    end
+  end
+
   adbDbAddItem(item)
 end
 
@@ -1839,7 +1854,12 @@ function adbDbClose()
 end
 
 ------ Debug ------
-local adb_debug_level = 1
+adb_debug_level = 1
+
+function adbOnDebugLevel(name, line, wildcards)
+  adb_debug_level = tonumber(wildcards.level)
+end
+
 function adbDebug(what, level) 
   if level ~= nil and level > adb_debug_level then
     return

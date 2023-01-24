@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.007"
+   version="1.008"
    >
 <description trim="y">
 <![CDATA[
@@ -160,6 +160,8 @@ TODO: move changelog to separate entry
   Add extra debug command
   Add colorName field to action commands
   Fix db update on cache sync
+  1.008
+  Bunch of internal debugging changes.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -260,6 +262,15 @@ TODO: move changelog to separate entry
   <alias
    script="adbOnAdbDebugCacheClear"
    match="^adb_debug_cache_clear$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="adbOnDebugLevel"
+   match="^adb_debug_level (?<level>\d+)$"
    regexp="y"
    enabled="y"
    send_to="12"
