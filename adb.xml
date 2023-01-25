@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.008"
+   version="1.009"
    >
 <description trim="y">
 <![CDATA[
@@ -136,6 +136,8 @@
 @Wadb format edit [<existing name>]@w - edit existing format
   For example: adb format edit
 
+@Wadb info@w - show plugin information.
+
 @Wadb [off|on]@w - disable or enable auto actions.
   It's the same as typing longer command:
   @Wasb options set cockpit enable_auto_actions [false|true]@w
@@ -157,12 +159,18 @@ TODO: move changelog to separate entry
   Fix for loot lines not starting with color codes.
   1.007
   Fix for clan items which don't have clan instead of foundat field.
-  Add extra debug command
-  Add colorName field to action commands
+  Added extra debug command
+  Added colorName field to action commands
   Fix db update on cache sync
   1.008
   Bunch of internal debugging changes.
-  Add support to track loot from 'torso'.
+  Added support to track loot from 'torso'.
+  1.009
+  Added items Skill Mods support.
+  Bumped DB version to 2
+  Added format options to output DB id, in-game item ID, Skill Mods, Comments, Keywords
+  Added format.db and default db_find_format options.
+  Added adb info command
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -365,6 +373,16 @@ TODO: move changelog to separate entry
   <alias
    script="adbOnFormatEdit"
    match="^adb format edit(?: (?<format>format\..+))?$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
+   script="adbOnAdbInfo"
+   match="^adb info$"
    regexp="y"
    enabled="y"
    send_to="12"

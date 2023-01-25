@@ -9,6 +9,7 @@ idReadyCallback = nil
 idContext = nil
 initialized = false
 
+adb_id_version = 2
 local adb_id_number = 0
 local adb_id_queue = {}
 local adb_id_busy = false
@@ -34,7 +35,9 @@ function adbIdentifyItem(command, ready_callback, context)
   idObject = {
     stats = {},
     enchants = {},
+    skillMods = {},
     identifyLevel = "full",
+    identifyVersion = adb_id_version,
   }
 
   adb_id_number = adb_id_number + 1
@@ -135,6 +138,13 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
       idObject.enchants[last_enchant][adb_enchant_stats[stat]] = tonumber(value)
       idObject.enchants[adb_enchant_stats[stat]] = adbGetStatNumberSafe(idObject.enchants[adb_enchant_stats[stat]]) + tonumber(value)
     end
+  end
+
+  -- capture skill mods
+  local skill, value
+  _, _, skill, value = line:find("^| [%a%s]+:? Modifies ([%a%s]+) by ([%+%-]%d+)%s+|$")
+  if skill ~= nil then
+    idObject.skillMods[skill] = tonumber(value);
   end
 end
 

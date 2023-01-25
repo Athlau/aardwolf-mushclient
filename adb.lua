@@ -27,12 +27,17 @@ local adb_options_description = {
     location = "Show item location from DB",
     bloot_diffs = "Show difference between base and bloot items",
     sections_name_newline = "Add newlines after report sections",
+    dbid = "Show item DB rowid value",
+    id = "Show item in-game id",
+    skill_mods = "Show item Skill Mods",
+    comments = "Show item comments field",
+    keywords = "Show item keywords",
   },
 }
 
 function adbGetDefaultOptions()
   local default_options = {
-    version = "1.002",
+    version = "1.003",
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
@@ -50,6 +55,7 @@ function adbGetDefaultOptions()
       identify_format = "format.full",
       identify_channel_format = "format.brief",
       cache_added_format = "format.full",
+      db_find_format = "format.db",
       max_cache_size = 500,
     },
     colors = {
@@ -83,6 +89,11 @@ function adbGetDefaultOptions()
       location = true,
       bloot_diffs = true,
       sections_name_newline = true,
+      dbid = true,
+      id = true,
+      skill_mods = true,
+      comments = true,
+      keywords = true,
     },
     ["format.brief"] = {
       level = true,
@@ -103,6 +114,36 @@ function adbGetDefaultOptions()
       location = false,
       bloot_diffs = false,
       sections_name_newline = false,
+      dbid = false,
+      id = false,
+      skill_mods = true,
+      comments = false,
+      keywords = false,
+    },
+    ["format.db"] = {
+      level = true,
+      wearable = true,
+      weapon_material = true,
+      score = true,
+      stats_total = true,
+      stats = true,
+      vitals = false,
+      resists = true,
+      weight = false,
+      worth = false,
+      enchants_sir = true,
+      flags = false,
+      foundat = false,
+      enchants_total = false,
+      enchants_details = false,
+      location = false,
+      bloot_diffs = false,
+      sections_name_newline = false,
+      dbid = true,
+      id = false,
+      skill_mods = true,
+      comments = false,
+      keywords = false,
     },
   }
   return default_options
@@ -118,6 +159,21 @@ function adbCheckOptions()
   if adb_options.version == 1.001 then
     adb_options.version = "1.002"
     adb_options.cockpit.max_cache_size = adbGetDefaultOptions().cockpit.max_cache_size
+  end
+
+  if adb_options.version == "1.002" then
+    adb_options.version = "1.003"
+    adb_options["format.db"] = copytable.deep(adbGetDefaultOptions()["format.db"])
+    adb_options.cockpit.db_find_format = adbGetDefaultOptions().cockpit.db_find_format
+    local added = {"dbid", "id", "skill_mods", "comments", "keywords"}
+    for k, v in pairs(adb_options) do
+      if k:find("^format%.") then
+        local copy_from = adbGetDefaultOptions()[k] and adbGetDefaultOptions()[k] or adbGetDefaultOptions()["format.full"]
+        for _, v1 in ipairs(added) do
+          adb_options[k][v1] = copy_from[v1]
+        end
+      end
+    end
   end
 
   if adb_options.version ~= adbGetDefaultOptions().version then
@@ -355,7 +411,7 @@ function adbOnFormatEdit(name, line, wildcards)
 end
 
 ------ recent cache ------
-local adb_latest_cache_version = "1.02"
+local adb_latest_cache_version = "1.03"
 local adb_recent_cache = {
   meta = {
     version = adb_latest_cache_version,
@@ -440,6 +496,17 @@ function adbCacheLoad()
     adb_recent_cache.meta.version = "1.02"
   end
 
+  if adb_recent_cache.meta.version == "1.02" then
+    adbInfo("Updating cache to version 1.03")
+    for k, v in pairs(adb_recent_cache) do
+      if k ~= "meta" then
+        v.skillMods = {}
+        v.identifyVersion = 1
+      end
+    end
+    adb_recent_cache.meta.version = "1.03"
+  end
+
   if adb_recent_cache.meta.version ~= adb_latest_cache_version then
     adbInfo("Cache version " .. adb_recent_cache.version .. " is too old, clearing cache")
     adb_recent_cache = {
@@ -491,6 +558,43 @@ function adbCacheGetItemByNameAndFoundAt(color_name, found_at)
     result.cache.timestamp = os.time()
   end
   return result
+end
+
+function adbCacheItemUpdateIdentify(cache_item, item)
+  assert(cache_item.colorName == item.colorName)
+  cache_item.cache.dirty = true
+
+  local ignore_keys = {
+    cache = true,
+    location = true,
+  }
+  for k, _ in pairs(item) do
+    if not ignore_keys[k] then
+      cache_item[k] = item[k]
+    end
+  end
+
+  if adb_options.cockpit.show_db_updates then
+    AnsiNote(ColoursToANSI("@CADB updated identify version:\n"
+                           .. adbIdReportGetItemString(cache_item, adb_options[adb_options.cockpit.cache_added_format])))
+  end
+end
+
+function adbCacheItemAddMobs(item, mobs)
+  local old_location = adbIdReportAddLocationInfo("", cache_item.location)
+  for k, v in pairs(mobs) do
+    adbItemLocationAddMob(cache_item, v)
+  end
+  local new_location = adbIdReportAddLocationInfo("", cache_item.location)
+
+  if old_location ~= new_location then
+    cache_item.cache.dirty = true
+    if adb_options.cockpit.show_db_updates then
+      AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("@CADB updated cache item @w[" .. cache_item.colorName .. "@w] @C:", cache_item.location)))
+    end
+  elseif adb_options.cockpit.show_db_cache_hits then
+    AnsiNote(ColoursToANSI("@CADB item already in cache: @w[" .. cache_item.colorName .. "@w]"))
+  end
 end
 
 function adbCacheAdd(item, skip_cache_search)
@@ -674,20 +778,23 @@ function adbDrainOne()
 
   cache_item = adbCacheGetItem(adb_drain_loot_item.colorName, adb_drain_loot_item.zone)
   if cache_item ~= nil then
-    adbDebug(adb_drain_loot_item.colorName.." already in cache, updating mobs/rooms info", 4)
-    local old_location = adbIdReportAddLocationInfo("", cache_item.location)
-    adbItemLocationAddMob(cache_item, adbCreateMobFromLootItem(adb_drain_loot_item))
-    local new_location = adbIdReportAddLocationInfo("", cache_item.location)
-    -- TODO update timestamp?
-    adbDebugTprint(cache_item, 4)
-    if old_location ~= new_location then
-      cache_item.cache.dirty = true
-      if adb_options.cockpit.show_db_updates then
-        AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo("@CADB updated cache item @w[" .. cache_item.colorName .. "@w] @C:", cache_item.location)))
-      end
-    elseif adb_options.cockpit.show_db_cache_hits then
-      AnsiNote(ColoursToANSI("@CADB item already in cache: @w[" .. cache_item.colorName .. "@w]"))
+    adbDebug(adb_drain_loot_item.colorName.." found in cache", 4)
+    if adb_options.cockpit.update_db_on_loot then
+        adbCacheItemAddMobs(cache_item, {adbCreateMobFromLootItem(adb_drain_loot_item)})
+
+        -- we have old item in cache/db, inentify again
+        if cache_item.identifyVersion ~= adb_id_version then
+          adbDebug("Updating old identify version for ".. adb_drain_loot_item.colorName, 1)
+          local ctx = {
+            drain_inv_item = adb_drain_inv_item,
+            drain_loot_item = adb_drain_loot_item,
+            cache_item = cache_item,
+          }
+          adbIdentifyItem("id " .. tostring(adb_drain_inv_item.id), adbDrainIdResultsReadyCB, ctx)
+          return
+        end
     end
+
     adbOnItemLooted(adb_drain_inv_item.id, cache_item)
     adbDrainOne()
     return
@@ -753,13 +860,18 @@ function adbDrainIdResultsReadyCB(item, ctx)
 
   -- TODO: not sure if "same" items could be carried by mobs in different zones
   -- for now going to have location.zone which is set to first mob's zone
-  local t = copytable.deep(item)
-  t.location = {
-    zone = ctx.drain_loot_item.zone,
-    mobs = {},
-  }
-  adbItemLocationAddMob(t, adbCreateMobFromLootItem(ctx.drain_loot_item))
-  adbCacheAdd(t)
+  if ctx.cache_item == nil then
+    local t = copytable.deep(item)
+    t.location = {
+      zone = ctx.drain_loot_item.zone,
+      mobs = {},
+    }
+    adbItemLocationAddMob(t, adbCreateMobFromLootItem(ctx.drain_loot_item))
+    adbCacheAdd(t)
+  else
+    adbCacheItemUpdateIdentify(ctx.cache_item, copytable.deep(item))
+  end
+
   adbOnItemLooted(item.stats.id, item)
   adbDrainOne()
 end
@@ -1104,6 +1216,18 @@ function adbGetStatsGroupString(stats, group, show_plus)
   return result
 end
 
+function adbGetSkillModsString(item, show_plus)
+  local result = ""
+  for k, v in pairs(item.skillMods) do
+    result = result .. (result:len() > 0 and ", " or "")
+             .. adb_options.colors.flags .. k .. " "
+             .. (v < 0 and adb_options.colors.bad or adb_options.colors.good)
+             .. ((show_plus and v > 0) and "+" or "") .. tostring(v)
+             .. adb_options.colors.default
+  end
+  return result
+end
+
 function adbGetWeaponString(item, format)
   return adb_options.colors.weapon .. tostring(adbGetStatNumberSafe(item.stats.avedam)) .. adb_options.colors.default .. "avg "
          .. adb_options.colors.value .. adbGetStatStringSafe(item.stats.weapontype) .. " "
@@ -1217,6 +1341,17 @@ end
 
 function adbIdReportGetItemString(item, format)
   local res = ""
+
+  if format.dbid and item.cache ~= nil then
+    res = adbIdReportAddValue(res, adbGetStatNumberSafe(item.cache.rowid), "db", adb_options.colors.value)
+  end
+  if format.id then
+    res = adbIdReportAddValue(res, adbGetStatNumberSafe(item.stats.id), "", adb_options.colors.value)
+  end
+  if res ~= "" then
+    res = res .. " "
+  end
+
   res = res .. (adb_options.cockpit.show_bloot_level and adbAddBlootLevel(item.colorName) or item.colorName)
   if format.level then
     res = adbIdReportAddValue(res, item.stats.level, " lvl", adb_options.colors.level)
@@ -1244,6 +1379,9 @@ function adbIdReportGetItemString(item, format)
   end
   if format.resists then
     res = adbIdReportAddValue(res, adbGetStatsGroupString(item.stats, adb_stat_groups.resists), "", adb_options.colors.default)
+  end
+  if format.skill_mods then
+    res = adbIdReportAddValue(res, adbGetSkillModsString(item, true), "", adb_options.colors.default)
   end
 
   if format.weight then
@@ -1285,8 +1423,18 @@ function adbIdReportGetItemString(item, format)
     end
   end
 
+  if format.keywords then
+    res = res .. adb_options.colors.section .. "\n Keywords:"
+    res = adbIdReportAddValue(res, item.stats.keywords, "", adb_options.colors.value)
+  end
+
   if format.location then
     res = adbIdReportAddLocationInfo(res, item.location)
+  end
+
+  if format.comments and item.comment then
+    res = res .. adb_options.colors.section .. "\n Comments:"
+    res = adbIdReportAddValue(res, item.comment, "", adb_options.colors.value)
   end
 
   res = res .. "@w"
@@ -1401,9 +1549,18 @@ end
 
 ------ DB ------
 adb_db_filename = "adb.db"
-adb_db_version = 1
+adb_db_version = 2
 adb_db = nil
 
+local adb_db_special_fields = {
+  dbid = true,
+  colorName = true,
+  zone = true,
+  comment = true,
+  identifyLevel = true,
+  identifyVersion = true,
+  skillMods = true,
+}
 function adbDbMakeItemFromRow(row)
   adbDebug("adbDbMakeItemFromRow " .. row.dbid, 2)
   adbDebugTprint(row, 3)
@@ -1421,14 +1578,15 @@ function adbDbMakeItemFromRow(row)
       mobs = {},
     },
     enchants = {},
+    skillMods = {},
     colorName = row.colorName,
     comment = row.comment,
     identifyLevel = row.identifyLevel,
+    identifyVersion = row.identifyVersion,
   }
 
   for k, v in pairs(row) do
-    if k ~= "dbid" and k ~= "colorName" and k ~= "zone" and
-       k ~= "comment" and k ~= "identifyLevel" and not k:find("^spell%d") then
+    if not adb_db_special_fields[k] and not k:find("^spells%d") then
       result.stats[k:lower()] = v
     end
   end
@@ -1436,7 +1594,7 @@ function adbDbMakeItemFromRow(row)
   if row["spells1name"] then
     result.stats.spells = {}
   end
-  for i = 1, 4, 1 do
+  for i = 1, 5, 1 do
     if row["spells" .. i .. "name"] then
       local spell = {
         level = row["spells" .. i .. "level"],
@@ -1444,6 +1602,14 @@ function adbDbMakeItemFromRow(row)
         name = row["spells" .. i .. "name"],
       }
       table.insert(result.stats.spells, spell)
+    end
+  end
+
+  if row.skillMods then
+    for s in row.skillMods:gmatch("[^,]+") do
+      local skill, value
+      _, _, skill, value = s:find("^(.*) (%d+)$")
+      result.skillMods[skill] = value
     end
   end
 
@@ -1579,7 +1745,7 @@ function adbDbAddItem(item)
 
   local sql = [[
     BEGIN TRANSACTION;
-    INSERT INTO items (zone, colorName
+    INSERT INTO items (identifyVersion, zone, colorName
   ]]
   if item.comment then
     sql = sql .. ", comment"
@@ -1594,11 +1760,11 @@ function adbDbAddItem(item)
     end
   end
   if item.stats.spells then
-    if #item.stats.spells > 4 then
+    -- 5 spells only ... too lazy to add another table
+    if #item.stats.spells > 5 then
       adbErr("adbDbAddItem #item.stats.spells = " .. #item.stats.spells)
     end
-    -- 4 spells only ... too lazy to add another table
-    for i = 1, 4, 1 do
+    for i = 1, 5, 1 do
       if item.stats.spells[i] then
         sql = sql .. ", spells" .. i .. "level"
         sql = sql .. ", spells" .. i .. "count"
@@ -1607,9 +1773,15 @@ function adbDbAddItem(item)
     end
   end
 
+  for _, _ in pairs(item.skillMods) do
+    sql = sql .. ", skillMods"
+    break
+  end
+
   sql = sql .. [[
     ) VALUES (
   ]]
+  sql = sql .. item.identifyVersion .. ", "
   sql = sql .. adbSqlTextValue(item.location.zone) .. ", "
   sql = sql .. adbSqlTextValue(item.colorName)
   if item.comment then
@@ -1629,7 +1801,7 @@ function adbDbAddItem(item)
     end
   end
   if item.stats.spells then
-    for i = 1, 4, 1 do
+    for i = 1, 5, 1 do
       if item.stats.spells[i] then
         sql = sql .. ",\r\n" .. item.stats.spells[i].level
         sql = sql .. ",\r\n" .. item.stats.spells[i].count
@@ -1637,6 +1809,15 @@ function adbDbAddItem(item)
       end
     end
   end
+
+  local mods = nil
+  for k, v in pairs(item.skillMods) do
+    mods = (mods ~= nil and (mods .. ",") or "") .. k .. " " .. tostring(v)
+  end
+  if mods ~= nil then
+    sql = sql .. ",\r\n" .. adbSqlTextValue(mods)
+  end
+
   sql = sql .. ");"
 
   adbDbCheckExecute(sql)
@@ -1718,7 +1899,7 @@ local adb_inv_stats_text_fields = {
 }
 
 function adbDbUpdateVersion(version)
-  adbDebug("adbDbUpdateVersion " .. version, 1)
+  adbInfo("Updating DB from version " .. version)
   if version == 0 then
     local sql = [[
       PRAGMA foreign_keys = ON;
@@ -1814,7 +1995,32 @@ function adbDbUpdateVersion(version)
     ]]
     adbDbCheckExecute(sql)
     version = 1
+    adbInfo("Updated DB to version " .. version)
   end
+
+  if version == 1 then
+    local sql = [[
+      PRAGMA foreign_keys = ON;
+      BEGIN TRANSACTION;
+
+      ALTER TABLE items ADD spells5level     INTEGER;
+      ALTER TABLE items ADD spells5count     INTEGER;
+      ALTER TABLE items ADD spells5name      TEXT;
+
+      ALTER TABLE items ADD skillMods        TEXT;
+
+      ALTER TABLE items ADD identifyVersion  INTEGER NOT NULL DEFAULT 1;
+
+      COMMIT;
+
+      PRAGMA user_version = 2;
+    ]]
+    adbDbCheckExecute(sql)
+    version = 2
+    adbInfo("Updated DB to version " .. version)
+  end
+
+  assert(version == adb_db_version)
 end
 
 function adbDbOpen()
@@ -1838,6 +2044,8 @@ function adbDbLoad()
   for row in adbDbNrowsExec("PRAGMA user_version") do
     db_user_version = row.user_version
   end
+
+  adbInfo("Opened DB version " .. db_user_version)
 
   if db_user_version ~= adb_db_version then
     adbDbUpdateVersion(db_user_version)
@@ -1864,6 +2072,29 @@ function adbDbClose()
   end
 end
 
+function adbOnAdbInfo()
+  adbDbSave()
+
+  local id = GetPluginID()
+  Note("")
+  adbInfo("Running ADB version: " .. tostring(GetPluginInfo(id, 19)))
+  Note("Installed as: " .. GetPluginInfo(id, 6))
+  Note("Identify module version: " .. adb_id_version)
+  Note("Cache version: " .. adb_recent_cache.meta.version .. " contains " .. adb_recent_cache.meta.count .. " item(s)")
+  Note("Loaded DB " .. GetPluginInfo(id, 20) .. adb_db_filename)
+  local result = 0
+  for row in adbDbNrowsExec("SELECT count(*) as count FROM items;") do
+    result = row.count
+  end
+  Note("DB Version: " .. adb_db_version .. " contains " .. result .. " items(s)")
+  for row in adbDbNrowsExec("SELECT count(*) as count FROM items WHERE identifyVersion<>" .. adb_id_version .. ";") do
+    result = row.count
+  end
+  if (result > 0) then
+    Note("  " .. result .. " item(s) scheduled to update identify version")
+  end
+  Note("")
+end
 ------ Debug ------
 adb_debug_level = 1
 
