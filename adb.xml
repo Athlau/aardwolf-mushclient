@@ -162,6 +162,7 @@ TODO: move changelog to separate entry
   Fix db update on cache sync
   1.008
   Bunch of internal debugging changes.
+  Add support to track loot from 'torso'.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -202,7 +203,7 @@ TODO: move changelog to separate entry
   <!-- Making sure that multiline crumble trigger fires after the item looted trigger. -->
   <trigger
    enabled="n"
-   match="^You get (?:(?<gold>[0-9,]+) gold coins?|(?:(?<count>\d+) \* )?(?<item>.*)) from the(?:[ \w]+)?(?:[ \w]+)? corpse of (?<mob>.*)\.$"
+   match="^You get (?:(?<gold>[0-9,]+) gold coins?|(?:(?<count>\d+) \* )?(?<item>.*)) from the(?:[ \w]+)?(?:[ \w]+)? (?:corpse|torso) of (?<mob>.*)\.$"
    regexp="y"
    send_to="12"
    sequence="10"
@@ -214,7 +215,7 @@ TODO: move changelog to separate entry
 
   <trigger
    enabled="n"
-   match="^You get (?<item>.*) from the(?: \w+)?(?: \w+)? corpse of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
+   match="^You get (?<item>.*) from the(?: \w+)?(?: \w+)? (?:corpse|torso) of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
    regexp="y"
    send_to="12"
    sequence="100"

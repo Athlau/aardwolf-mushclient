@@ -394,6 +394,7 @@ function adbCacheShrink(force_full_clear)
     elseif item.cache.dirty then
       adbDbUpdateItem(item)
     end
+    adbDebug("Evicted from cache [" .. item.cache.rowid .. "] [".. item.colorName .. "] [".. item.location.zone .. "]", 2)
     adb_recent_cache[keys[i]] = nil
     adb_recent_cache.meta.count = adb_recent_cache.meta.count - 1
   end
@@ -871,7 +872,7 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
 
   -- it seems that sometimes there's leftover color code from previous line
   -- at least I saw "@x248You get @Rminotaur clan @x069markings@w..."
-  local name_start, name_end
+  local name_start
   _, name_start = colored_line:find("^@?[%a%d]*You get @?[%a%d]*%d+@?[%a%d]* %* ")
   if name_start == nil then 
     _, name_start = colored_line:find("^@?[%a%d]*You get ")
@@ -880,23 +881,33 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
       return
     end
   end
-  local name_end_pattern = " from the ?%a* ?%a* corpse of "
-  name_end = colored_line:find("@w" .. name_end_pattern) or colored_line:find(name_end_pattern)
+
+  -- weird... sometimes you get items not from a corpse:
+  -- You get (Enhanced 2) *-Victory-* from the torso of Mota.
+  -- TODO: compile regex here instead of lua matches?
+  local name_end_patterns = {
+    "@w from the ?%a* ?%a* corpse of ",
+    "@w from the ?%a* ?%a* torso of ",
+    " from the ?%a* ?%a* corpse of ",
+    " from the ?%a* ?%a* torso of ",
+  }
+
+  local name_end = nil
+  local mob_start = nil
+  local i = 1
+  while name_end == nil and i <= #name_end_patterns do
+    name_end, mob_start = colored_line:find(name_end_patterns[i])
+    i = i + 1
+  end
   if name_end == nil then
-    adbErr("Can't parse name end: ["..colored_line.."]")
+    adbErr("Can't parse name end and mob start: ["..colored_line.."]")
     return
   end
   color_name = colored_line:sub(name_start + 1, name_end - 1)
 
-  local mob_start, mob_end
-  _, mob_start = colored_line:find("@w" .. name_end_pattern)
-  if mob_start == nil then
-    _, mob_start = colored_line:find(name_end_pattern)
-    if mob_start == nil then
-      adbErr("Can't parse mob start: ["..colored_line.."]")
-      return
-    end
-  end
+  assert(mob_start ~= nil)
+
+  local mob_end
   mob_end = colored_line:find("@w%.$") or colored_line:find("%.$")
   if mob_end == nil then
     adbErr("Can't parse mob end: ["..colored_line.."]")
