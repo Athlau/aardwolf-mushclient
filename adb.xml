@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.009"
+   version="1.010"
    >
 <description trim="y">
 <![CDATA[
@@ -123,6 +123,8 @@
    TODO: more details on format, add format add/remove commands.
    For now you can check options under "format.brief" and "format.full"
 
+ @Wdb_find_format <format.name>@w - default "adb find" output format.
+
 @Wadb format add format.<newname> [<existing name>]@w - adds new output format with specified <new name>
   and copies settings from existing format. After adding a format you can change it's settings
   via @Wadb options set <format.newname> <setting> <value>@w
@@ -137,6 +139,16 @@
   For example: adb format edit
 
 @Wadb info@w - show plugin information.
+
+@Wadb find <query> [format.name]@w - search db using provided <query>.
+  The query should be formed following sqlite3 select rules.
+  Some examples:
+     adb find type='Weapon' and level>25 and level<30 ORDER BY avedam desc, level asc
+     adb find dam+hit>=50 format.full
+
+  To get list of fields available use "dinv help query" for now. It's almost the same.
+  TODO: list fields available
+  TODO: split help into topics and give more details here.
 
 @Wadb [off|on]@w - disable or enable auto actions.
   It's the same as typing longer command:
@@ -171,6 +183,10 @@ TODO: move changelog to separate entry
   Added format options to output DB id, in-game item ID, Skill Mods, Comments, Keywords
   Added format.db and default db_find_format options.
   Added adb info command
+  1.010
+  Added adb find command
+  Fix for reading Skill Mods from DB.
+  Set default debug level to 0.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -383,6 +399,16 @@ TODO: move changelog to separate entry
   <alias
    script="adbOnAdbInfo"
    match="^adb info$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
+   script="adbOnAdbFind"
+   match="^adb find (?<query>.+?)(?: (?<format>format\..+))?$"
    regexp="y"
    enabled="y"
    send_to="12"

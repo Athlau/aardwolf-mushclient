@@ -1609,7 +1609,7 @@ function adbDbMakeItemFromRow(row)
     for s in row.skillMods:gmatch("[^,]+") do
       local skill, value
       _, _, skill, value = s:find("^(.*) (%d+)$")
-      result.skillMods[skill] = value
+      result.skillMods[skill] = tonumber(value)
     end
   end
 
@@ -2095,8 +2095,33 @@ function adbOnAdbInfo()
   end
   Note("")
 end
+
+function adbOnAdbFind(name, line, wildcards)
+  adbInfo(line)
+  if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
+    adbInfo("Unknown format " .. wildcards.format .. " using default")
+  end
+  local format = adb_options[wildcards.format] or adb_options[adb_options.cockpit.db_find_format]
+
+  local sql = "SELECT * FROM items WHERE " .. wildcards.query .. ";"
+  vm, err = adb_db:prepare(sql)
+  if (not vm) then
+    Note(string.format("QUERY ERROR -> %s.", adb_db:errmsg():upper()))
+    return
+  end
+
+  -- TODO: reuse compiled statement instead of adbDbNrowsExec(sql)
+  local count = 0
+  for row in adbDbNrowsExec(sql) do
+    local item = adbDbMakeItemFromRow(row)
+    local message = adbIdReportGetItemString(item, format)
+    count = count + 1
+    AnsiNote(count .. ". " .. ColoursToANSI(message))
+  end
+  adbInfo("Found " .. count .. " items.")
+end
 ------ Debug ------
-adb_debug_level = 1
+adb_debug_level = 0
 
 function adbOnDebugLevel(name, line, wildcards)
   adb_debug_level = tonumber(wildcards.level)
