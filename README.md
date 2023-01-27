@@ -10,6 +10,7 @@ Some screenshots:
 ![image](https://user-images.githubusercontent.com/118027636/214982774-c8d2077d-4674-4757-b81b-55e225745e47.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982993-9775707e-ed6b-46e3-8890-75b2f46f8e02.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982206-5414e08f-4f09-4c5e-8fd5-4ed4a943dc67.png)
+![image](https://user-images.githubusercontent.com/118027636/214986330-4be382a8-e7bb-4155-84fe-e008e4dd4753.png)
 
 Has highly customizable output format and some other usefull features.
 See **adb help** for details.
