@@ -4,21 +4,29 @@ dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 -- This is mostly a copy-paste from dinv plugin identification code
 
-idObject = {stats={}}
+idObject = nil
 idReadyCallback = nil
 idContext = nil
+idCommand = nil
 initialized = false
 
 adb_id_version = 2
 local adb_id_number = 0
 local adb_id_queue = {}
 local adb_id_busy = false
-function adbIdentifyItem(command, ready_callback, context)
+
+function adbIdDebugDump()
+  Note("adb_id_queue: busy=" .. tostring(adb_id_busy) .. " lastcmd=" .. idCommand)
+  tprint(adb_id_queue)
+end
+
+function adbIdentifyItem(command, ready_callback, context, draining_queue)
   adbIdentifyInit()
 
   -- add to queue if we're busy identifying something else already
   -- this is all weird a bit, wish there were simple atomic ops :(
-  if (adb_id_busy) then
+  if adb_id_busy and not draining_queue then
+    adbDebug("adb_id_busy adding to queue: " .. command, 2)
     local t = {
       cmd = command,
       cb = ready_callback,
@@ -27,10 +35,12 @@ function adbIdentifyItem(command, ready_callback, context)
     table.insert(adb_id_queue, t)
     return
   end
-
   adb_id_busy = true
+
+  adbDebug("adbIdentifyItem: " .. command, 2)
   idReadyCallback = ready_callback
   idContext = context
+  idCommand = command
 
   idObject = {
     stats = {},
@@ -53,11 +63,13 @@ function adbIdentifyItem(command, ready_callback, context)
 end
 
 function adbIdCheckQueue()
+  adbDebug("adbIdCheckQueue " .. tostring(adb_id_busy), 3)
   if #adb_id_queue == 0 then
+    adb_id_busy = false
     return
   end
   pending = table.remove(adb_id_queue, 1)
-  adbIdentifyItem(pending.cmd, pending.cb, pending.ctx)
+  adbIdentifyItem(pending.cmd, pending.cb, pending.ctx, true)
 end
 
 inv = {}
@@ -160,6 +172,8 @@ function inv.items.trigger.itemIdStart()
 end
 
 function inv.items.trigger.itemIdEnd()
+  adbDebug("inv.items.trigger.itemIdEnd: " .. idCommand, 2)
+
   last_enchant = ""
   EnableTrigger(inv.items.trigger.itemIdStatsName, false)
 
@@ -171,7 +185,6 @@ function inv.items.trigger.itemIdEnd()
   end
 
   idReadyCallback(copytable.deep(idObject), idContext)
-  adb_id_busy = false
   adbIdCheckQueue()
 end
 

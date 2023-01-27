@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.010"
+   version="1.011"
    >
 <description trim="y">
 <![CDATA[
@@ -89,7 +89,7 @@
    but are only executed for bonus loot items. In other words %bloot is bigger than 0.
    @RNote@R: bonus loot items aren't automatically identified. Instead you will get
    most field values from it's "base" counterpart if that's found in the DB. Except for
-   %item and %bloot which correspond to the actually looted item.
+   %item, %name, %colorName and %bloot which correspond to the actually looted item.
    Note: @RBloot actions with not be executed if base items isn't found in DB.@w
 
    I'm trying to decide if this usable or should there be an options to actually
@@ -183,6 +183,10 @@ TODO: move changelog to separate entry
   Added adb find command
   Fix for reading Skill Mods from DB.
   Set default debug level to 0.
+  1.011
+  Change bloot actions to use name and colorName of the actually looted item.
+  Minor fix to identify version updates which was forgotten sometimes.
+  String are passed to lua auto actions without surrounding quotes now.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>

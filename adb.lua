@@ -40,10 +40,10 @@ function adbGetDefaultOptions()
     version = "1.003",
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
-      on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" \" .. %name) end",
+      on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" %colorName\") end",
       on_normal_looted_cmd = "echo could have done \"put %item bag\" here",
       on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then " ..
-                                "Send(\"drop %item\") elseif %type~=\"Key\" then Send(\"put %item 2785187925\") end",
+                                "Send(\"echo drop %item\") elseif %type~=\"Key\" then Send(\"put %item 2785187925\") end",
     },
     cockpit = {
       update_db_on_loot = true,
@@ -446,6 +446,7 @@ function adbCacheShrink(force_full_clear)
   for i = #keys, force_full_clear and 1 or (adb_options.cockpit.max_cache_size + 1), -1 do
     local item = adb_recent_cache[keys[i]]
     if item.cache.new then
+      assert(not item.cache.rowid)
       adbDbAddItem(item)
     elseif item.cache.dirty then
       adbDbUpdateItem(item)
@@ -525,6 +526,7 @@ function adbCacheGetKey(name, zone)
 end
 
 function adbCacheGetItem(color_name, zone)
+  adbDebug("adbCacheGetItem [" .. color_name .. "] [" .. zone .. "]", 3)
   local result = adb_recent_cache[adbCacheGetKey(color_name, zone)]
 
   if result == nil then
@@ -534,7 +536,10 @@ function adbCacheGetItem(color_name, zone)
 
   if result ~= nil then
     result.cache.timestamp = os.time()
+  else
+    adbDebug("not found in cache: [" .. color_name .. "] [" .. zone .. "]", 1)
   end
+
   return result
 end
 
@@ -602,6 +607,8 @@ function adbCacheAdd(item, skip_cache_search)
   local cache_item = nil
   if not skip_cache_search then
     local cache_item = adbCacheGetItem(item.colorName, item.location.zone)
+  else
+    assert(adb_recent_cache[key] == nil)
   end
   if cache_item == nil then
     if item.cache == nil then
@@ -639,27 +646,32 @@ end
 local adb_invitem_stack = {}
 local adb_looted_stack = {}
 
-function adbReplacePatterns(cmd, id, bloot, base_item, lua)
-  adbDebug("adbReplacePatterns:" .. cmd, 3)
+function adbMakeLuaString(s)
+  return s:gsub("[\"\\]", "\\%1")
+end
+
+function adbReplacePatterns(cmd, id, bloot, name, colorName, base_item, lua)
+  adbDebug("adbReplacePatterns:" .. cmd, 4)
   for k, v in pairs(base_item.stats) do
     -- we might be getting stats from chached item, so don't use it's id
-    if k ~= "id" then
+    if k ~= "id" and k ~= "name" then
       local value = v
       if lua and type(value) == "string" then
-        value = value:gsub("[\"\\]", "\\%1")
-        value = "\"" .. value .. "\""
+        value = adbMakeLuaString(value)
       end
       cmd = cmd:gsub("%%%f[%a]" .. k .. "%f[%A]", value)
     end
   end
   cmd = cmd:gsub("%%%f[%a]" .. "item" .. "%f[%A]", id)
   cmd = cmd:gsub("%%%f[%a]" .."bloot" .. "%f[%A]", bloot)
-  cmd = cmd:gsub("%%%f[%a]" .."colorName" .. "%f[%A]", base_item.colorName)
+  cmd = cmd:gsub("%%%f[%a]" .."name" .. "%f[%A]", lua and adbMakeLuaString(name) or name)
+  local cname = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(colorName) or colorName
+  cmd = cmd:gsub("%%%f[%a]" .."colorName" .. "%f[%A]", lua and adbMakeLuaString(cname) or cname)
 
   local gpp = base_item.stats.weight == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
   cmd = cmd:gsub("%%%f[%a]" .."gpp" .. "%f[%A]", gpp)
 
-  adbDebug("replaced cmd:" .. cmd, 3)
+  adbDebug("replaced cmd:" .. cmd, 4)
   return cmd
 end
 
@@ -687,7 +699,7 @@ function adbOnItemLooted(id, item)
   local cmd
   cmd = adb_options.auto_actions.on_normal_looted_lua
   if cmd ~= "" then
-    cmd = adbReplacePatterns(cmd, id, bloot, item, true)
+    cmd = adbReplacePatterns(cmd, id, bloot, item.stats.name, item.colorName, item, true)
     local lua = loadstring(cmd)
     if lua ~= nil then
       adbDebug("Executing lua " .. cmd, 3)
@@ -698,7 +710,7 @@ function adbOnItemLooted(id, item)
   end
   cmd = adb_options.auto_actions.on_normal_looted_cmd
   if cmd ~= "" then
-    cmd = adbReplacePatterns(cmd, id, bloot, item)
+    cmd = adbReplacePatterns(cmd, id, bloot, item.stats.name, item.colorName, item)
     adbDebug("Executing cmd " .. cmd, 3)
     Execute(cmd)
   end
@@ -722,7 +734,7 @@ function adbOnBlootItemLooted(id, drain_loot_item)
   local cmd
   cmd = adb_options.auto_actions.on_bloot_looted_lua
   if cmd ~= "" then
-    cmd = adbReplacePatterns(cmd, id, bloot, base_item, true)
+    cmd = adbReplacePatterns(cmd, id, bloot, drain_loot_item.name, drain_loot_item.colorName, base_item, true)
     local lua = loadstring(cmd)
     if lua ~= nil then
       adbDebug("Executing lua " .. cmd, 3)
@@ -733,7 +745,7 @@ function adbOnBlootItemLooted(id, drain_loot_item)
   end
   cmd = adb_options.auto_actions.on_bloot_looted_cmd
   if cmd ~= "" then
-    cmd = adbReplacePatterns(cmd, id, bloot, base_item)
+    cmd = adbReplacePatterns(cmd, id, bloot, drain_loot_item.name, drain_loot_item.colorName, base_item)
     adbDebug("Executing cmd " .. cmd, 3)
     Execute(cmd)
   end
@@ -861,15 +873,17 @@ function adbDrainIdResultsReadyCB(item, ctx)
   -- TODO: not sure if "same" items could be carried by mobs in different zones
   -- for now going to have location.zone which is set to first mob's zone
   if ctx.cache_item == nil then
-    local t = copytable.deep(item)
-    t.location = {
+    item.location = {
       zone = ctx.drain_loot_item.zone,
       mobs = {},
     }
-    adbItemLocationAddMob(t, adbCreateMobFromLootItem(ctx.drain_loot_item))
-    adbCacheAdd(t)
+    adbItemLocationAddMob(item, adbCreateMobFromLootItem(ctx.drain_loot_item))
+    adbCacheAdd(item)
   else
-    adbCacheItemUpdateIdentify(ctx.cache_item, copytable.deep(item))
+    -- if identify had to queue this call, cache_item was copied and no longer
+    -- references actual table in recent cache.
+    local cache_item = adb_recent_cache[adbCacheGetKey(cache_item.colorName, cache_item.location.zone)]
+    adbCacheItemUpdateIdentify(cache_item, item)
   end
 
   adbOnItemLooted(item.stats.id, item)
@@ -1076,6 +1090,7 @@ function adbOnAdbDebugDump()
   Note("recent cache:")
   print(adb_recent_cache.meta.count .. " entries")
   --tprint(adb_recent_cache)
+  adbIdDebugDump()
   Note("-------------------------------------")
 end
 
