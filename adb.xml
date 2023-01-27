@@ -20,16 +20,11 @@
 <description trim="y">
 <![CDATA[
 @R---------------- ADB plugin loaded ----------------------------------------------
-@CThis is very early version and lots of things are in my todo list, including
+@CThis is still early version and lots of things are in my todo list, including
 @Cadding more help details and examples.
-@RIt's likely that whatever DB you create would be discarded in the next update@w
-@RAnd yes, there's no sql db under the cache yet, although it's planned@w
 @wBla bla bla, add more text here
 
-@RThis is !experimental! and default settings will automatically drop certain items
-@Ron the ground. Check the on_normal_looted_lua settings.@w
 @RDon't shoot yourself in the leg. Format settings checks aren't there yet.@w
-
 @R!DISABLE THIS IN EPICS!@w
 
 @R    It's required to enable server side invmon for this plugin to work!
@@ -47,11 +42,11 @@
  specified channel.
  Examples:
  @Waid 2685807183@w  - will identify item and output results locally using 
-                       format specified in @Gidentify_format@w
+                   format specified in @Gidentify_format@w
  @Waid something format.full@w  - will identify item and output results locally
-                                 using format.full settings
+                              using format.full settings
  @Waid sword gtell@w - will identify item and output result to group channel
-                       using format specified in identify_channel_format
+                   using format specified in identify_channel_format
  @Waid sword worn t Sletch format.full@w - spam Sletch with full details :P
 
 @Wadb options [edit|reset|set <group> <option> [value]]@w
@@ -65,16 +60,14 @@
  @Wadb options set auto_actions on_normal_looted_cmd put %item bag@w -
    Executes "put %item bag" command for all non-bloot items looted from corpses.
    @W%item@w will be replaced with looted item id.
-   Note: @Rdon't use bloot actions with anything more than %item, %bloot for now.@w
          Default options are explicitly conflicting, lua script will drop low cost
          items and then "_cmd" will try to put this dropped item in *my* bag.
          You can either modify the lua part to drop item in "else" clause or just
          clear it if you don't care.
-   TODO: document all other fields available
  @Wadb options set auto_actions on_normal_looted_cmd@w - clear this action
 
 @Ccockpit@W options@w
- Those could be set via @Wadb options set cockpit <options> <value>@w:
+ Those could be set via @Wadb options edit@w or @Wadb options set cockpit <options> <value>@w:
 
  @Wenable_auto_actions <true|false>@w - enables or disables auto actions.
    Those actions from @Cauto_actions@w group are executed when you loot an item.
@@ -89,13 +82,16 @@
    There are few special fields available:
    @G%item@w - looted item ID.
    @G%bloot@w - bloot level of the item, 0 for "normal" loot.
-   @G%gpp@w - item's gold per pount value, worth/weight (checked for division by 0).
+   @G%gpp@w - item's gold per pound value, worth/weight (checked for division by 0).
    @G%colorName@w - item's color name
 
    @mon_bloot_looted_lua@w and @mon_bloot_looted_cmd@w are the same as normal actions,
    but are only executed for bonus loot items. In other words %bloot is bigger than 0.
    @RNote@R: bonus loot items aren't automatically identified. Instead you will get
-   all field values from it's "base" counterpart if that's found in the DB.
+   most field values from it's "base" counterpart if that's found in the DB. Except for
+   %item and %bloot which correspond to the actually looted item.
+   Note: @RBloot actions with not be executed if base items isn't found in DB.@w
+
    I'm trying to decide if this usable or should there be an options to actually
    identify bloot items as well.
 
