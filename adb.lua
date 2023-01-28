@@ -40,9 +40,9 @@ function adbGetDefaultOptions()
     version = "1.003",
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
-      on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot \" .. tostring(%bloot) .. \" %colorName\") end",
+      on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot %bloot %colorName\") end",
       on_normal_looted_cmd = "echo could have done \"put %item bag\" here",
-      on_normal_looted_lua = "if %gpp<200 and (%type==\"Armor\" or %type==\"Weapon\" or %type==\"Trash\" or %type==\"Treasure\") then " ..
+      on_normal_looted_lua = "if %gpp<200 and (\"%type\"==\"Armor\" or \"%type\"==\"Weapon\" or \"%type\"==\"Trash\" or \"%type\"==\"Treasure\") then " ..
                                 "Send(\"echo drop %item\") elseif %type~=\"Key\" then Send(\"put %item 2785187925\") end",
     },
     cockpit = {
