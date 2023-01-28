@@ -17,7 +17,10 @@ local adb_id_busy = false
 
 function adbIdDebugDump()
   Note("adb_id_queue: busy=" .. tostring(adb_id_busy) .. " lastcmd=" .. idCommand)
-  tprint(adb_id_queue)
+  Note("last ctx:")
+  adbDebugTprint(idContext)
+  Note("queue:")
+  adbDebugTprint(adb_id_queue)
 end
 
 function adbIdentifyItem(command, ready_callback, context, draining_queue)

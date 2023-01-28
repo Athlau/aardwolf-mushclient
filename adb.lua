@@ -585,7 +585,7 @@ function adbCacheItemUpdateIdentify(cache_item, item)
   end
 end
 
-function adbCacheItemAddMobs(item, mobs)
+function adbCacheItemAddMobs(cache_item, mobs)
   local old_location = adbIdReportAddLocationInfo("", cache_item.location)
   for k, v in pairs(mobs) do
     adbItemLocationAddMob(cache_item, v)
@@ -606,7 +606,7 @@ function adbCacheAdd(item, skip_cache_search)
   local key = adbCacheGetKey(item.colorName, item.location.zone)
   local cache_item = nil
   if not skip_cache_search then
-    local cache_item = adbCacheGetItem(item.colorName, item.location.zone)
+    cache_item = adbCacheGetItem(item.colorName, item.location.zone)
   else
     assert(adb_recent_cache[key] == nil)
   end
@@ -788,7 +788,7 @@ function adbDrainOne()
     return
   end
 
-  cache_item = adbCacheGetItem(adb_drain_loot_item.colorName, adb_drain_loot_item.zone)
+  local cache_item = adbCacheGetItem(adb_drain_loot_item.colorName, adb_drain_loot_item.zone)
   if cache_item ~= nil then
     adbDebug(adb_drain_loot_item.colorName.." found in cache", 4)
     if adb_options.cockpit.update_db_on_loot then
@@ -862,6 +862,8 @@ function adbCreateMobFromLootItem(item)
 end
 
 function adbDrainIdResultsReadyCB(item, ctx)
+  -- TODO: check if identify failed...
+
   if ctx.drain_inv_item.id ~= item.stats.id then
     adbInfo("adbDrainIdResultsReadyCB -> something is off! Expected id "..tostring(ctx.drain_inv_item.id) ..
            " but got " .. tostring(item.stats.id) ..
@@ -882,7 +884,8 @@ function adbDrainIdResultsReadyCB(item, ctx)
   else
     -- if identify had to queue this call, cache_item was copied and no longer
     -- references actual table in recent cache.
-    local cache_item = adb_recent_cache[adbCacheGetKey(cache_item.colorName, cache_item.location.zone)]
+    local cache_item = adb_recent_cache[adbCacheGetKey(ctx.cache_item.colorName, ctx.cache_item.location.zone)]
+    assert(cache_item)
     adbCacheItemUpdateIdentify(cache_item, item)
   end
 
