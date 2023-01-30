@@ -1015,10 +1015,10 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   -- You get (Enhanced 2) *-Victory-* from the torso of Mota.
   -- TODO: compile regex here instead of lua matches?
   local name_end_patterns = {
-    "@w from the ?%a* ?%a* corpse of ",
-    "@w from the ?%a* ?%a* torso of ",
-    " from the ?%a* ?%a* corpse of ",
-    " from the ?%a* ?%a* torso of ",
+    "@w from the ?%a*,? ?%a* corpse of ",
+    "@w from the ?%a*,? ?%a* torso of ",
+    " from the ?%a*,? ?%a* corpse of ",
+    " from the ?%a*,? ?%a* torso of ",
   }
 
   local name_end = nil

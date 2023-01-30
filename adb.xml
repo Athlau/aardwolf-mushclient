@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.011"
+   version="1.012"
    >
 <description trim="y">
 <![CDATA[
@@ -187,6 +187,8 @@ TODO: move changelog to separate entry
   Change bloot actions to use name and colorName of the actually looted item.
   Minor fix to identify version updates which was forgotten sometimes.
   String are passed to lua auto actions without surrounding quotes now.
+  1.012
+  One more pattern for loot from the chrisp, charred corpse :D
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -239,7 +241,7 @@ TODO: move changelog to separate entry
 
   <trigger
    enabled="n"
-   match="^You get (?<item>.*) from the(?: \w+)?(?: \w+)? (?:corpse|torso) of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
+   match="^You get (?<item>.*) from the(?: \w+,?)?(?: \w+)? (?:corpse|torso) of (?<mob>.*)\.\n(?i)\1(?-i) crumbles into (?<crumble>[0-9,]+) gold pieces?.\n\Z"
    regexp="y"
    send_to="12"
    sequence="100"
