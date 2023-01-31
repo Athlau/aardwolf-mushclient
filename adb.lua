@@ -946,6 +946,7 @@ function adbLootedStackPush(item)
 
     -- Failed, report and clear stacks
     adbErr("------- adbLootedStackPush error -------")
+    Note("Make sure you have invmon enabled. Type invmon to check.")
     Note("pushing:")
     tprint(item)
     adbOnAdbDebugDump()
@@ -1626,7 +1627,7 @@ function adbDbMakeItemFromRow(row)
   if row.skillMods then
     for s in row.skillMods:gmatch("[^,]+") do
       local skill, value
-      _, _, skill, value = s:find("^(.*) (%d+)$")
+      _, _, skill, value = s:find("^(.*) (-?%d+)$")
       result.skillMods[skill] = tonumber(value)
     end
   end

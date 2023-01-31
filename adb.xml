@@ -189,6 +189,9 @@ TODO: move changelog to separate entry
   String are passed to lua auto actions without surrounding quotes now.
   1.012
   One more pattern for loot from the chrisp, charred corpse :D
+  1.013
+  Add note about invmon to related error message.
+  Fix for items with really loooooong names taking more than one line.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>

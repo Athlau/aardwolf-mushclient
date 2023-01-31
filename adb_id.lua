@@ -106,6 +106,7 @@ end
 
 --Illuminate, Resonate, Solidify
 local last_enchant = ""
+local name_cont = false
 adb_enchants = {
   order = {"Solidify", "Illuminate", "Resonate"},
   Illuminate = "I",
@@ -135,6 +136,21 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
     -- "@RName@w       : @x248a @RDrakosh @x248kite shield                              @w|"
     name_end = colored_line:find("%s*@w|$") or colored_line:find("@w%s*|$") or colored_line:find("%s*|$")
     idObject.colorName = colored_line:sub(name_start + 1, name_end - 1)
+    name_cont = true
+  end
+
+  if line:find("^| Id%s+:%s+(%d+)%s+|$") then
+    name_cont = false
+  end
+
+  if name_cont then
+    local colored_line = StylesToColours(styles)
+    --TODO: check if we need to strip out first color code in continuation if that matches
+    --      last color code in previous line or something like this.
+    local _, _, cont = colored_line:find("^@w|            : (.-)%s+|$")
+    if cont ~= nil then
+      idObject.colorName = idObject.colorName .. " " .. cont
+    end
   end
 
   -- capture enchants
