@@ -105,10 +105,10 @@ local maze_to_no_resume_once = false
 
 help_message = [[
    Examples:
-   In [15973] mapper cexit exit_to Before the Grand Gates of Castle Vlad-Shamir;wait(0.3)
+   In [15973] mapper cexit exit_to Before the Grand Gates of Castle Vlad-Shamir;;wait(0.3)
    In [19648] The Skullgore Plain, mapper cexit wait(0.5);;maze_to 19652;;wait(30)
    In [19652] The Skullgore Plain, mapper cexit exit_to The Dark Path;;wait(0.1)
-   Note: before adding cexit in mapper, use maze_to_noresume_once so that it doesn't
+   Note: before adding "maze_to" cexits in mapper, use maze_to_noresume_once so that it doesn't
          auto resume when hitting target room
 ]]
 
