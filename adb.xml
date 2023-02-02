@@ -192,6 +192,7 @@ TODO: move changelog to separate entry
   1.013
   Add note about invmon to related error message.
   Fix for items with really loooooong names taking more than one line.
+  Fix reading of items with negative skillmods from db.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
