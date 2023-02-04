@@ -1571,6 +1571,10 @@ function adbIdReportAddDiffString(report, diff, format)
     report = report .. "\n"
   end
 
+  if (diff.stats.level ~= nil) then
+    report = adbIdReportAddValue(report, adbGetStatNumberSafe(diff.stats.level), " lvl", adb_options.colors.level, true)
+  end
+
   if (diff.stats.avedam ~= nil) then
     report = adbIdReportAddValue(report, adbGetStatNumberSafe(diff.stats.avedam), "avg", adb_options.colors.weapon, true)
   end
@@ -1736,7 +1740,7 @@ local adb_bloot_names = {
   Godly = 21,
 }
 
-local adb_diff_fields = {"score", "weight", "worth", "avedam"}
+local adb_diff_fields = {"score", "weight", "worth", "avedam", "level"}
 function adbDiffItems(item1, item2, ignore_enchants)
   local result = {stats={}}
 
