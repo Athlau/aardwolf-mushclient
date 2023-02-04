@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.014"
+   version="1.015"
    >
 <description trim="y">
 <![CDATA[
@@ -252,6 +252,8 @@ TODO: move changelog to separate entry
   Added aide - aid for Enchanters.
   New format options to show item type, spells, disenchant hyperlinks.
   Switched to use wrapped_captures: no more extra prompts, empty lines etc.
+  1.015
+  Added lvl difference to blood diff display.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
