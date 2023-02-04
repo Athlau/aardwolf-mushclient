@@ -1,19 +1,21 @@
 # ADB
 Items database and reporting tool. Automatically tracks items you loot and adds to sqlite DB.
-Has built-in identify/report commands, database search, configurable actions for picked up items and more.
+Has built-in identify/report commands, database search, configurable actions for picked up items,
+inline bonus loot level display, enchats search in bags with disenchant hyperlinks and more.
+
+Has highly customizable output format and some other usefull features.
+See **adb help** for details.
 
 **This is under active development**
 
 Some screenshots:
 ![image](https://user-images.githubusercontent.com/118027636/214982543-8e73df32-be2e-4950-bbfb-e80dfaf31e83.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982660-f88b4e44-4307-4a11-bfff-149b221e4467.png)
+![image](https://user-images.githubusercontent.com/118027636/216733840-fed1d047-da0f-4eb6-af30-d0c257689a28.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982774-c8d2077d-4674-4757-b81b-55e225745e47.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982993-9775707e-ed6b-46e3-8890-75b2f46f8e02.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982206-5414e08f-4f09-4c5e-8fd5-4ed4a943dc67.png)
 ![image](https://user-images.githubusercontent.com/118027636/215364023-c58b8007-5629-4235-9a74-54cb0aad6de8.png)
-
-Has highly customizable output format and some other usefull features.
-See **adb help** for details.
 
 # HyperlinkMapperNotes.xml
 Parses mapper notes for current room and shows clickable hyperlinks with certain commands.
