@@ -8,6 +8,10 @@ See **adb help** for details.
 
 **This is under active development**
 
+*******************************************
+**!!! PLUGIN REQUIRES MUSH CLIENT r2245 or LATER !!!**
+*******************************************
+
 Some screenshots:
 ![image](https://user-images.githubusercontent.com/118027636/214982543-8e73df32-be2e-4950-bbfb-e80dfaf31e83.png)
 ![image](https://user-images.githubusercontent.com/118027636/214982660-f88b4e44-4307-4a11-bfff-149b221e4467.png)
