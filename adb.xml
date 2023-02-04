@@ -254,6 +254,7 @@ TODO: move changelog to separate entry
   Switched to use wrapped_captures: no more extra prompts, empty lines etc.
   1.015
   Added lvl difference to blood diff display.
+  Fix "aid" error for items which are not in bags.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>

@@ -1242,7 +1242,7 @@ function adbProcessIdResults(obj, ctx)
           styles = ColoursToStyles(adb_options.colors.good .. "remove " .. v)
           local action = "disenchant " .. obj.stats.id .. " " .. v .. " confirm"
 
-          if ctx.bagid ~= "" then
+          if ctx.bagid ~= nil and ctx.bagid ~= "" then
             action = "get " .. obj.stats.id .. " " .. ctx.bagid .. "\n" ..
                      action ..
                      "\nput " .. obj.stats.id .. " " .. ctx.bagid
