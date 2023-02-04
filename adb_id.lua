@@ -1,5 +1,6 @@
 require "check"
 require "copytable"
+require "wrapped_captures"
 dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 -- This is mostly a copy-paste from dinv plugin identification code
@@ -11,7 +12,6 @@ idCommand = nil
 initialized = false
 
 adb_id_version = 2
-local adb_id_number = 0
 local adb_id_queue = {}
 local adb_id_busy = false
 
@@ -24,8 +24,6 @@ function adbIdDebugDump()
 end
 
 function adbIdentifyItem(command, ready_callback, context, draining_queue)
-  adbIdentifyInit()
-
   -- add to queue if we're busy identifying something else already
   -- this is all weird a bit, wish there were simple atomic ops :(
   if adb_id_busy and not draining_queue then
@@ -53,16 +51,14 @@ function adbIdentifyItem(command, ready_callback, context, draining_queue)
     identifyVersion = adb_id_version,
   }
 
-  adb_id_number = adb_id_number + 1
-  check (AddTriggerEx(inv.items.trigger.itemIdStartName,
-		      "^{adbIdentifyStart "..tostring(adb_id_number).."}$",
-                      "",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput + trigger_flag.OneShot,
-                      custom_colour.Custom11, 0, "", "inv.items.trigger.itemIdStart", sendto.script, 0))
+  Capture.untagged_output(command, true, true, true, adbIdCapturedCB, false)
+end
 
-  SendNoEcho("\necho {adbIdentifyStart "..adb_id_number.."}"..
-             "\n".. command ..
-             "\necho {adbIdentifyEnd}")
+function adbIdCapturedCB(style_lines, start, line)
+  for _, v in ipairs(style_lines) do
+    adbOnItemIdStatsLine("", strip_colours(StylesToColours(v)), nil, v)
+  end
+  adbIdItemIdEnd()
 end
 
 function adbIdCheckQueue()
@@ -78,31 +74,6 @@ end
 inv = {}
 inv.items = {}
 inv.items.trigger = {}
-inv.items.trigger.itemIdStartName = "adrlInvItemsTriggerIdStart"
-inv.items.trigger.itemIdStatsName = "adrlInvItemsTriggerIdStats"
-inv.items.trigger.itemIdEndName   = "adrlInvItemsTriggerIdEnd"
-
-drlTriggerFlagsBaseline = trigger_flag.Enabled + trigger_flag.RegularExpression +
-                          trigger_flag.Replace + trigger_flag.KeepEvaluating
-
-function adbIdentifyInit()
-  if initialized then
-    return
-  end
-
-  initialized = true
-  -- Trigger on one of the detail/stat lines of an item's id report (lore, identify, bid, etc.)
-  check (AddTriggerEx(inv.items.trigger.itemIdStatsName,
-                      "^(" ..
-                         "\\| .*\\||" ..
-                         ".*A full appraisal will reveal further information on this item.|" ..
-                         "\\+-*\\+|"..
-                      ")$",
-                      "",
-                      drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput,
-                      custom_colour.NoChange, 0, "", "adbOnItemIdStatsLine", sendto.script, 0))
-  check (EnableTrigger(inv.items.trigger.itemIdStatsName, false)) -- default to off
-end
 
 --Illuminate, Resonate, Solidify
 local last_enchant = ""
@@ -179,22 +150,10 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
   end
 end
 
-function inv.items.trigger.itemIdStart()
-  EnableTrigger(inv.items.trigger.itemIdStatsName, true)
-
-  check (AddTriggerEx(inv.items.trigger.itemIdEndName,
-               "^{adbIdentifyEnd}$",
-               "inv.items.trigger.itemIdEnd()",
-               drlTriggerFlagsBaseline + trigger_flag.OmitFromOutput  + trigger_flag.OneShot,
-               custom_colour.Custom11,
-               0, "", "", sendto.script, 0))
-end
-
-function inv.items.trigger.itemIdEnd()
+function adbIdItemIdEnd()
   adbDebug("inv.items.trigger.itemIdEnd: " .. idCommand, 2)
 
   last_enchant = ""
-  EnableTrigger(inv.items.trigger.itemIdStatsName, false)
 
   -- That's a bit of a hack but I'm lazy to
   -- Add options to print clan field instead of foundat,

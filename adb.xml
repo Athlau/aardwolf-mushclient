@@ -146,6 +146,61 @@
   TODO: list fields available
   TODO: split help into topics and give more details here.
 
+@Waide [container_id] [enchanted] [removable] [S<num>] [I<num>] [R<num>] [format.name]@w - Enchanters aid.
+  This command will identify all matching items in the container or inventory if @Gcontainer_id@w is not specified.
+  @Genchanted@w - only show items which have one or more enchants present
+  @Gremovable@w - only show items which have one or more removable (by enchanter) enchants
+
+  @GS<num>@w - show items with Solidify giving <= @G<num>@w HR/DR.
+  @GI<num>@w - show items with Illuminate giving <= @G<num>@w Stats.
+  @GR<num>@w - show items with Resonate giving <= @G<num>@w Stats.
+    If more 2 or more of the SIR parameters are present then items matching at least one of the given checks will be shown.
+    If @Gremovable@w options is given, then only items with removable SIR enchants passing the comparision will be shown.
+
+  @Gformat.name - format to use with Identify output, defaults to @Wcockpit.aide_format@w option.
+
+  Examples:
+    @Waide@w - identify all items in inventory
+
+    @Waide 2785187925 enchanted@w - show all @Genchanted@w items in container 2785187925:
+
+      @D[@W2668599686@D] @G(@WDazzling <9>@G)@w @x117a @x153ghostly @x117helmet @D[@C201@D lvl] [@Whead@D]
+       [@G36@Ddr @G12@Dhr] [@Y27@Dstats] [@G2@Dstr @G5@Dint @G5@Dwis @G4@Ddex @G11@Dluk] [@CSIR@D]
+      @x051 Solidify @x244[@x046+6@x244dr] [@x046remove Solidify@x244]@x051 Illuminate @x244[@x046+4@x244wis] [@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+3@x244luk] [@x046remove Resonate@x244]
+
+      @D[@W2685807183@D] @RAura @Yof @GTrivia @D[@C1@D lvl] [@Wabove@D] [@G9@Ddr @G7@Dhr] [@Y21@Dstats] [@G3@Dstr @G1@Dint @G7@Dwis @G3@Ddex @G2@Dcon @G5@Dluk] [@CSIR@D]
+      @x051 Solidify @x244[@x046+2@x244dr] [@x196TP only@x244]@x051 Illuminate @x244[@x046+4@x244wis] [@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+3@x244luk] [@x046remove Resonate@x244]
+
+    @Waide 2785187925 removable S2@w - show items in container 2785187925 which either have removeable
+                                  Illuminate/Resonate enchants or removable Solidify with HR/DR<=2
+    Will output same as above.
+
+    @Waide 2695030721 enchanted S3 I0 R0@w - show items in container 2695030721 which have solidify enchant giving <= 3 HR/DR:
+
+      @D[@W2706637349@D] @G(@WVibrant 5@G)@w @y-@W)@w=@y=@w=@Wdull lance@w=@y=@w==--- @D[@C92@D lvl] [@Wwield@D]
+       [@M232@Davg @Wpolearm Pierce @D] [@G11@Ddr @G6@Dhr] [@Y7@Dstats] [@G1@Dint @G6@Dluk] [@CSR@D]
+      @x051 Solidify @x244[@x046+1@x244dr] [@x046remove Solidify@x244]@x051 Resonate @x244[@x046+2@x244luk] [@x046remove Resonate@x244]
+
+      @D[@W2756839229@D] @G(@WEnhanced 2@G)@w @C. @W+ @Rbloody liver greaves @W+ @C. @D[@C200@D lvl] [@Wlegs@D]
+       [@G24@Ddr @G5@Dhr] [@Y29@Dstats] [@G7@Dstr @G5@Dint @G3@Dwis @G7@Ddex @G6@Dcon @G1@Dluk]@D [@CSIR@D]
+      @x051 Solidify @x244[@x046+3@x244hr] [@x196TP only@x244]@x051 Illuminate @x244[@x046+3@x244wis][@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+1@x244luk] [@x196TP only@x244]
+
+      @D[@W2757910324@D] @G(@WPolished 1@G)@w @x086a shapeshifting shield @D[@C200@D lvl] [@Wshield@D]
+       [@G26@Ddr @G11@Dhr] [@Y24@Dstats] [@G4@Dstr @G2@Dint @G8@Dwis @G5@Ddex @G1@Dcon @G4@Dluk]@D [@CSIR@D]
+      @x051 Solidify @x244[@x046+1@x244hr] [@x196TP only@x244]@x051 Illuminate @x244[@x046+4@x244wis] [@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+3@x244luk] [@x196TP only@x244]
+
+    @Waide removable S3 I2 R2@w - show items in inventory which have a @Mremovable@w Solidify<=3 or Illuminate<=2 or Resonate<=2:
+
+      @D[@W2682741121@D] @G(>@WTouchstone@G<) @CRock Collecting Bag @D[@C200@D lvl] [@Whold@D]
+       [@G20@Ddr @G21@Dhr] [@Y12@Dstats] [@G10@Dstr @G1@Dwis @G1@Dluk] [@CSI@D]
+      @x051 Solidify @x244[@x046+1@x244hr] [@x046remove Solidify@x244]@x051 Illuminate @x244[@x046+1@x244wis @x046+1@x244luk] [@x046remove Illuminate@x244]
+
+    @wI find this handy to use after batch enchanting items in a container. So I can find items with "bad" enchants
+    like 1-2-3 HR/DR, 1-2 stat IR, to disenchant and attempt to land a better enchant.
+    @WNote:@w If disechant_hyperlinks is set in the @Gformat@w used, then you'll see a clickable Hyperlink to remove any
+    of removable enchants for the particular item. Hyperlink command will take item out of container and put it back after
+    disenchanting if necessary.
+
 @Wadb [off|on]@w - disable or enable auto actions.
   It's the same as typing longer command:
   @Wasb options set cockpit enable_auto_actions [false|true]@w
@@ -193,6 +248,10 @@ TODO: move changelog to separate entry
   Add note about invmon to related error message.
   Fix for items with really loooooong names taking more than one line.
   Fix reading of items with negative skillmods from db.
+  1.014
+  Added aide - aid for Enchanters.
+  New format options to show item type, spells, disenchant hyperlinks.
+  Switched to use wrapped_captures: no more extra prompts, empty lines etc.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -263,7 +322,7 @@ TODO: move changelog to separate entry
    match="^(?!\| Name       \:)(?!{invitem}).*\((?<bloot>Polished|Enhanced|Burnished|Shiny|Vibrant|Sparkling|Gleaming|Shimmering|Dazzling|Brilliant|Radiant|Wondrous|Majestic|Exalted|Eternal|Legendary|Epic|Mythical|Fabled|Divine|Godly)\).*$"
    regexp="y"
    send_to="12"
-   sequence="100"
+   sequence="10000"
    keep_evaluating="y"
    omit_from_output="y"
    script="adbOnBlootNameTrigger"
@@ -275,6 +334,15 @@ TODO: move changelog to separate entry
   <alias
    script="adbOnIdentifyCommand"
    match="^aid (?<id>[^\s]+)(?<worn> worn)?(?: (?<channel>(?!format\.).+?))?(?: (?<format>format\..+))?$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+  <alias
+   script="adbOnAIDECommand"
+   match="^aide(?: (?<id>\d+))?(?: (?<enchanted>enchanted))?(?: (?<removable>removable))?(?: S(?<solidify>\d+))?(?: I(?<illuminate>\d+))?(?: R(?<resonate>\d+))?(?: (?<format>format\..+))?$"
    regexp="y"
    enabled="y"
    send_to="12"

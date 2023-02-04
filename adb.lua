@@ -3,6 +3,7 @@ require "var"
 require "serialize"
 require "gmcphelper"
 require "wait"
+require "wrapped_captures"
 dofile(GetPluginInfo(GetPluginID(), 20).."adb_id.lua")
 
 local adb_options = {}
@@ -32,12 +33,15 @@ local adb_options_description = {
     skill_mods = "Show item Skill Mods",
     comments = "Show item comments field",
     keywords = "Show item keywords",
+    type = "Show item type",
+    spells = "Show item spells.",
+    disechant_hyperlinks = "Show hyperlinks to disenchant removable enchants on item",
   },
 }
 
 function adbGetDefaultOptions()
   local default_options = {
-    version = "1.003",
+    version = "1.004",
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot %bloot %colorName\") end",
@@ -54,6 +58,7 @@ function adbGetDefaultOptions()
       identify_command = "id",
       identify_format = "format.full",
       identify_channel_format = "format.brief",
+      aide_format = "format.enchanter",
       cache_added_format = "format.full",
       db_find_format = "format.db",
       max_cache_size = 500,
@@ -94,6 +99,9 @@ function adbGetDefaultOptions()
       skill_mods = true,
       comments = true,
       keywords = true,
+      type = true,
+      spells = true,
+      disechant_hyperlinks = true,
     },
     ["format.brief"] = {
       level = true,
@@ -119,6 +127,9 @@ function adbGetDefaultOptions()
       skill_mods = true,
       comments = false,
       keywords = false,
+      type = false,
+      spells = true,
+      disechant_hyperlinks = false,
     },
     ["format.db"] = {
       level = true,
@@ -144,6 +155,37 @@ function adbGetDefaultOptions()
       skill_mods = true,
       comments = false,
       keywords = false,
+      type = false,
+      spells = true,
+      disechant_hyperlinks = false,
+    },
+    ["format.enchanter"] = {
+      level = true,
+      wearable = true,
+      weapon_material = false,
+      score = false,
+      stats_total = true,
+      stats = true,
+      vitals = false,
+      resists = false,
+      weight = false,
+      worth = false,
+      enchants_sir = true,
+      flags = false,
+      foundat = false,
+      enchants_total = false,
+      enchants_details = true,
+      location = false,
+      bloot_diffs = false,
+      sections_name_newline = false,
+      dbid = true,
+      id = true,
+      skill_mods = false,
+      comments = false,
+      keywords = false,
+      type = false,
+      spells = false,
+      disechant_hyperlinks = true,
     },
   }
   return default_options
@@ -174,6 +216,21 @@ function adbCheckOptions()
         end
       end
     end
+  end
+
+  if adb_options.version == "1.003" then
+    adb_options.version = "1.004"
+    local added = {"type", "spells", "disechant_hyperlinks"}
+    for k, v in pairs(adb_options) do
+      if k:find("^format%.") then
+        local copy_from = adbGetDefaultOptions()[k] and adbGetDefaultOptions()[k] or adbGetDefaultOptions()["format.full"]
+        for _, v1 in ipairs(added) do
+          adb_options[k][v1] = copy_from[v1]
+        end
+      end
+    end
+    adb_options["format.enchanter"] = copytable.deep(adbGetDefaultOptions()["format.enchanter"])
+    adb_options.cockpit.aide_format = "format.enchanter"
   end
 
   if adb_options.version ~= adbGetDefaultOptions().version then
@@ -238,7 +295,8 @@ function adbOnOptionsEditCommand(name, line, wildcards)
 
   assert(adb_options[key1][key2] ~= nil)
   if type(adb_options[key1][key2]) == "string" then
-    if key1 == "cockpit" and (key2 == "identify_format" or key2 == "identify_channel_format" or key2 == "cache_added_format") then
+    if key1 == "cockpit" and (key2 == "identify_format" or key2 == "identify_channel_format" or 
+                              key2 == "cache_added_format" or key2 == "aide_format") then
       local format = adbPickFormat("Choose " .. key2, adb_options[key1][key2])
       if format == nil then return end
       adb_options[key1][key2] = format
@@ -1104,7 +1162,7 @@ function adbOnIdentifyCommand(name, line, wildcards)
   end
   local identify_format = adb_options[wildcards.format] or
                           (adb_options[wildcards.channel == "" and
-                           adb_options.cockpit.identify_format or adb_options.cockpit.identify_channel_format])
+                                       adb_options.cockpit.identify_format or adb_options.cockpit.identify_channel_format])
   local ctx = {
     channel = wildcards.channel,
     format = identify_format,
@@ -1113,6 +1171,10 @@ function adbOnIdentifyCommand(name, line, wildcards)
 end
 
 function adbOnIdentifyCommandIdResultsReadyCB(obj, ctx)
+  adbProcessIdResults(obj, ctx)
+end
+
+function adbProcessIdResults(obj, ctx)
   if (obj.stats.name == nil) then
     adbDebug("item not found", 2)
     return
@@ -1125,20 +1187,26 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj, ctx)
     print("base name: ".. adbGetBaseColorName(obj.colorName))
   end, 3)
 
-  local message = adbIdReportGetItemString(obj, ctx.format)
-
   --TODO: add to cache?
 
-  if ctx.format.location or ctx.format.bloot_diffs then
+  local format = ctx.format
+  if format.disechant_hyperlinks and ctx.channel == "" then
+    format = copytable.deep(ctx.format)
+    format.enchants_details = false
+  end
+
+  local message = adbIdReportGetItemString(obj, format)
+
+  if format.location or format.bloot_diffs then
     local bloot = adbGetBlootLevel(obj.stats.name)
     local base_name = adbGetBaseColorName(obj.colorName)
     local base_item = adbCacheGetItemByNameAndFoundAt(base_name, obj.stats.foundat)
     if base_item ~= nil then
-      if ctx.format.bloot_diffs and bloot > 0 then
+      if format.bloot_diffs and bloot > 0 then
         local diff = adbDiffItems(base_item, obj, true)
-        message = adbIdReportAddDiffString(message, diff, ctx.format)
+        message = adbIdReportAddDiffString(message, diff, format)
       end
-      if ctx.format.location then
+      if format.location then
         message = adbIdReportAddLocationInfo(message, base_item.location)
       end
     end
@@ -1151,6 +1219,171 @@ function adbOnIdentifyCommandIdResultsReadyCB(obj, ctx)
       SendNoEcho(ctx.channel .. " " .. line)
     end
   end
+
+  if format.disechant_hyperlinks and ctx.channel == "" and
+     obj.enchants ~= nil and adbEnchantsPresent(obj.enchants) then
+
+    for k, v in ipairs(adb_enchants.order) do
+      if obj.enchants[v] ~= nil then
+        local report = adb_options.colors.enchants .. " " .. v
+        report = adbIdReportAddValue(report, adbGetStatsGroupString(obj.enchants[v], adb_stat_groups.hrdr, true), "", adb_options.colors.default)
+        report = adbIdReportAddValue(report, adbGetStatsGroupString(obj.enchants[v], adb_stat_groups.basics, true), "", adb_options.colors.default)
+        if not obj.enchants[v].removable then
+          report = adbIdReportAddValue(report, "TP only", "", adb_options.colors.bad)
+        else
+          report = report .. " " .. adb_options.colors.default .. "["
+        end
+        local styles = ColoursToStyles(report, adb_options.colors.default, ColourNameToRGB("black"), false, false)
+        for _, v in ipairs(styles) do
+          ColourTell(RGBColourToName(v.textcolour), RGBColourToName(v.backcolour), v.text)
+        end
+
+        if obj.enchants[v].removable then
+          styles = ColoursToStyles(adb_options.colors.good .. "remove " .. v)
+          local action = "disenchant " .. obj.stats.id .. " " .. v .. " confirm"
+
+          if ctx.bagid ~= "" then
+            action = "get " .. obj.stats.id .. " " .. ctx.bagid .. "\n" ..
+                     action ..
+                     "\nput " .. obj.stats.id .. " " .. ctx.bagid
+          end
+
+          Hyperlink(action, "remove " .. v, "click to:\n" .. action, RGBColourToName(styles[1].textcolour), "black", false)
+          styles = ColoursToStyles("]", adb_options.colors.default, ColourNameToRGB("black"), false, false)
+          ColourTell(RGBColourToName(styles[1].textcolour), "black", "]")
+        end
+      end
+    end
+
+    Note("")
+  end
+end
+
+local adb_inv_data_queue = nil
+local adb_aide_busy = false
+local adb_aide_ctx = nil
+function adbOnAIDECommand(name, line, wildcards)
+  if adb_aide_busy then
+    adbInfo("AIDE is already running, please retry when current operation finishes.")
+    return
+  end
+  adb_aide_busy = true
+  adbInfo(line)
+
+  if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
+    adbInfo("Unknown format " .. wildcards.format .. " using default")
+  end
+  --TODO add default format
+  --adb_options.cockpit.identify_format
+  local identify_format = adb_options[wildcards.format] and adb_options[wildcards.format] or adb_options[adb_options.cockpit.aide_format]
+
+  adb_aide_ctx = {
+    channel = "",
+    format = identify_format,
+    bagid = wildcards.id,
+    Solidify = wildcards.solidify,
+    Illuminate = wildcards.illuminate,
+    Resonate = wildcards.resonate,
+    removable = wildcards.removable == "removable",
+    enchanted = wildcards.enchanted == "enchanted",
+  }
+  adb_inv_data_queue = {}
+
+  local add_id = (wildcards.id ~= "" and (" " .. wildcards.id) or "")
+
+  if add_id ~= "" then
+    -- If that's a non-existing container invdata will report: Item xxxxxxx not found.
+    -- Abort busy state in this case.
+    AddTriggerEx("AIDEFailedTrigger",
+                "^Item" .. add_id .. " not found.$", "",
+                trigger_flag.Replace + trigger_flag.Enabled + trigger_flag.RegularExpression + trigger_flag.OmitFromOutput + trigger_flag.OneShot + trigger_flag.Temporary,
+                custom_colour.NoChange, 0, "", "adbInvDataNotFoundCB", sendto.scriptafteromit, 0);
+  end
+
+  Capture.tagged_output(
+    "invdata" .. add_id,
+    "{invdata" .. add_id .. "}",
+    "{/invdata}",
+    false,
+    true,
+    true,
+    true,
+    adbInvDataReadyCB,
+    false
+  )
+end
+
+function adbInvDataNotFoundCB()
+  adbInfo("AIDE container " .. adb_aide_ctx.bagid .. " not found.")
+  adb_aide_busy = false
+end
+
+function adbInvDataReadyCB(style_lines)
+  adbDebug("adbInvDataReadyCB", 2)
+  for _, v in ipairs(style_lines) do
+    local line = strip_colours(StylesToColours(v))
+    local id
+    _, _, id = line:find("^(%d+),.*,.*,.*,.*,.*,.*,.*$")
+    if id ~= nil then
+      table.insert(adb_inv_data_queue, id)
+    else
+      adbErr("Can't find ID in invdata line " .. line)
+    end
+  end
+  adbInfo("AIDE processing " .. #adb_inv_data_queue .. " items(s).")
+  adbInvDataQueueDrain()
+end
+
+function adbInvDataQueueDrain()
+  if #adb_inv_data_queue == 0 then
+    adb_aide_busy = false
+    adbInfo("AIDE finished.")
+    return
+  end
+  --TODO: disable show_bloot_level while running this?
+  --EnableTrigger("adbBlootNameTrigger", adb_options.cockpit.show_bloot_level)
+  local item_id = table.remove(adb_inv_data_queue, 1)
+  local cmd = "id " .. item_id
+  if adb_aide_ctx.bagid ~= "" then
+    cmd = "get " .. item_id .. " " .. adb_aide_ctx.bagid .. "\n" ..
+          cmd ..
+          "\nput " .. item_id .. " " .. adb_aide_ctx.bagid
+  end
+  adbIdentifyItem(cmd, adbInvDataDrainIdentifyReadyCB, adb_aide_ctx)
+end
+
+function adbGetEnchantSum(enchant)
+  local result = 0
+  if enchant ~= nil then
+    for _, v in pairs(adb_enchant_stats) do
+      result = result + (enchant[v] or 0)
+    end
+  end
+  return result
+end
+
+function adbInvDataDrainIdentifyReadyCB(obj, ctx)
+  local has_enchant = false
+  local has_removable_enchant = false
+  local has_enchant_check = false
+  local passed_enchant_check = false
+
+  for _, v in ipairs(adb_enchants.order) do
+    has_enchant_check = has_enchant_check or (ctx[v] ~= "")
+    if obj.enchants[v] ~= nil then
+      has_enchant = true
+      has_removable_enchant = has_removable_enchant or obj.enchants[v].removable
+      local pass = (not ctx.removable or obj.enchants[v].removable) and 
+                   (ctx[v] == "" or (adbGetEnchantSum(obj.enchants[v]) <= tonumber(ctx[v])))
+      passed_enchant_check = passed_enchant_check or pass
+    end
+  end
+
+  local passes = (has_enchant or not ctx.enchanted) and (has_removable_enchant or not ctx.removable) and (passed_enchant_check or not has_enchant_check)
+  if passes then
+    adbProcessIdResults(obj, ctx)
+  end
+  adbInvDataQueueDrain()
 end
 
 ------ Identify results reporting ------
@@ -1162,7 +1395,7 @@ function adbGetStatStringSafe(stat)
   return stat ~= nil and stat or ""
 end
 
-local adb_stat_groups = {
+adb_stat_groups = {
   basics = {
     order = {"str", "int", "wis", "dex", "con", "luck"},
     ["str"] = "str",
@@ -1321,6 +1554,17 @@ function adbIdReportAddEnchantsInfo(report, enchants)
   return report  
 end
 
+function adbGetSpellsString(spells)
+  result = nil
+  for _, v in ipairs(spells) do
+    result = result ~= nil and (result .. ", ") or ""
+    result = result .. adb_options.colors.value .. v.count .. adb_options.colors.default .. " x " ..
+             adb_options.colors.value .. v.name
+    result = adbIdReportAddValue(result, v.level, " lvl", adb_options.colors.level)
+  end
+  return result
+end
+
 function adbIdReportAddDiffString(report, diff, format)
   report = report .. "\n" .. adb_options.colors.section .. " Bloot changes:"
   if format.sections_name_newline then
@@ -1375,6 +1619,9 @@ function adbIdReportGetItemString(item, format)
   if format.level then
     res = adbIdReportAddValue(res, item.stats.level, " lvl", adb_options.colors.level)
   end
+  if format.type then
+    res = adbIdReportAddValue(res, item.stats.type, "", adb_options.colors.value)
+  end
   if format.wearable then
     res = adbIdReportAddValue(res, item.stats.wearable, "", adb_options.colors.value)
   end
@@ -1411,6 +1658,10 @@ function adbIdReportGetItemString(item, format)
   end
   if format.enchants_sir then
     res = adbIdReportAddValue(res, adbGetEnchantsShortString(item), "", adb_options.colors.enchants)
+  end
+
+  if format.spells and item.stats.spells then
+    res = adbIdReportAddValue(res, adbGetSpellsString(item.stats.spells), "", adb_options.colors.value)
   end
 
   if format.flags or format.foundat then
