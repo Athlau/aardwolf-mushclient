@@ -24,6 +24,8 @@ Some screenshots:
 # HyperlinkMapperNotes.xml
 Parses mapper notes for current room and shows clickable hyperlinks with certain commands.
 Also updates "mappernotecommand" alias with those commands to be used with macro keys etc.
+UPDATE: if you're running client r2249 or later then it will show current room cexits
+as Hyperlinks too.
 
 Just add Hyperlink() to any part of mapper note:
 Hyperlink(whatever_commnd_in_this_room;another_cmd)
@@ -36,8 +38,8 @@ Mapper note: key on a mountain goat Hyperlink(qw mountain goat)
 When passing by it will allow you to click a link to do "qw mountain goat",
 you can also bind mappernotecommand to any key and have the same executed without clicking.
 
-With recent change to build-in mapper code (thanks Fiendish for implementing requested change)
-this plugin is going to be updated to include hyperlinks to room cexits as well. (pending)
+![image](https://user-images.githubusercontent.com/118027636/216854746-f7347f66-4a08-405d-9419-b6e1b242bdb2.png)
+![image](https://user-images.githubusercontent.com/118027636/216854810-197cdaf7-8689-4afd-83d4-dea113c9b2ee.png)
 
 # TranscendenceController.xml
 Plugin to simplify controller task in Transcendence epic.
