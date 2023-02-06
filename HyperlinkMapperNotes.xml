@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2022-11-09 20:15:43"
    requires="5.07"
-   version="1.0"
+   version="1.01"
    >
 <description trim="y">
 <![CDATA[
@@ -25,6 +25,19 @@ Shows clickable hyperlinks from mapper notes and updates mappernotecommand alias
 
 </plugin>
 
+<triggers>
+  <trigger
+   enabled="n"
+   match="^\*\*\* MAPPER NOTE \*\*\* -> (.*)$"
+   regexp="y"
+   send_to="14"
+   sequence="100"
+   name="ShowHyperlinksTrigger"
+   omit_from_output="y"
+  >
+  <send>ShowHyperlinks("%1", true)</send>
+  </trigger>
+</triggers>
 
 <!--  Script  -->
 
@@ -36,6 +49,8 @@ require "gmcphelper"
 help_message = [[
 Parses mapper notes for current room and shows clickable hyperlinks with certain commands.
 Also updates "mappernotecommand" alias with those commands to be used with macro keys etc.
+UPDATE: if you're running client r2249 or later then it will show current room cexits
+as Hyperlinks too.
 
 Just add Hyperlink() to any part of mapper note:
 Hyperlink(whatever_commnd_in_this_room;another_cmd)
@@ -49,18 +64,52 @@ When passing by it will allow you to click a link to do "qw mountain goat",
 you can also bind mappernotecommand to any key and have the same executed without clicking.
 ]]
 
+require "serialize"
+local aard_extras = require "aard_lua_extras"
+local client_version = 0
+-- r2249 switched mapper notes output to go through simulate
+-- so can just use a trigger now and strip out Hyperlinks from note output.
+local min_version = 2249
+
+function ShowHyperlinks(note, show_note)
+  if show_note then
+    local stripped_note = note:gsub("Hyperlink%((.-)%)", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if stripped_note ~= "" then
+      Note("*** MAPPER NOTE *** -> " .. stripped_note)
+    end
+  end
+
+  for match in note:gmatch("Hyperlink%((.-)%)") do
+    Hyperlink(match, match, match, "cyan", "blue", false, true)
+    Note("")
+    AddAlias("MapperNoteAlias", "mappernotecommand", match, alias_flag.Enabled + alias_flag.Replace, "")
+    SetAliasOption("MapperNoteAlias", "send_to", 10)
+  end
+end
+
 function OnPluginBroadcast(msg, id, name, text)
   if id == "3e7dedbe37e44942dd46d264" then -- message from the GMCP Handler
     if (text == "room.info") then
       local roomid = tonumber(gmcp("room.info.num"))
-      local rc, notes, found = CallPlugin("b6eae87ccedd84f510b74714", "room_find_notes", roomid)
-      if (rc == error_code.eOK) then
-	if found then
-          for match in string.gmatch(tostring(notes), "Hyperlink%((.-)%)") do
-            Hyperlink(match, match, match, "cyan", "blue", false, true)
-            Note("")
-            AddAlias("MapperNoteAlias", "mappernotecommand", match, alias_flag.Enabled + alias_flag.Replace, "")
-            SetAliasOption("MapperNoteAlias", "send_to", 10)
+
+      -- Only go this route for old clients
+      if client_version < min_version then
+        local rc, notes, found = CallPlugin("b6eae87ccedd84f510b74714", "room_find_notes", roomid)
+        if (rc == error_code.eOK) then
+          if found then
+            ShowHyperlinks(notes, false)
+          end
+        end
+      end
+
+      -- add Hyperlinks with cexits
+      if client_version >= min_version then
+        local rc, cexits = CallPlugin("b6eae87ccedd84f510b74714", "room_cexits", roomid)
+        if (rc == error_code.eOK) then
+          local cexits = loadstring(string.format("return %s", cexits))()
+          for k, v in pairs(cexits) do
+            Hyperlink(k, k .. " -> [" .. v .. "]", "click to " .. k, "cyan", "blue", false, true)
+            Note()
           end
         end
       end
@@ -68,9 +117,22 @@ function OnPluginBroadcast(msg, id, name, text)
   end
 end
 
+function CheckVersion()
+  local version, err = aard_extras.PackageVersion()
+  if err == nil then
+    client_version = version
+    EnableTrigger("ShowHyperlinksTrigger", client_version >= min_version)
+  end
+end
+
+function OnPluginConnect()
+  CheckVersion()
+end
+
 function OnPluginInstall()
-   print("HyperlinkMapperNotes loaded.")
-   print(help_message)
+  CheckVersion()
+  print("HyperlinkMapperNotes loaded.")
+  print(help_message)
 end
 
 ]]>
