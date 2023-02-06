@@ -1118,7 +1118,8 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
 
   -- one shotted mob without getting gmcp in combat state
   if gmcp("char.status.state") == "3" and not was_in_combat then
-    adbDrainOne()
+    -- get a chance for crumble trigger to fire
+    AddTimer("DrainOneTimer", 0, 0, 1, "", timer_flag.Enabled + timer_flag.OneShot + timer_flag.Replace + timer_flag.Temporary, "adbDrainOne")
   end
 end
 
@@ -1248,7 +1249,13 @@ function adbProcessIdResults(obj, ctx)
                      "\nput " .. obj.stats.id .. " " .. ctx.bagid
           end
 
-          Hyperlink(action, "remove " .. v, "click to:\n" .. action, RGBColourToName(styles[1].textcolour), "black", false)
+          local color
+          if ctx[v] ~= nil and ctx[v] ~= "" and (adbGetEnchantSum(obj.enchants[v]) <= tonumber(ctx[v])) then
+            color = RGBColourToName(styles[1].textcolour)
+          else
+            color = "gray"
+          end
+          Hyperlink(action, "remove " .. v, "click to:\n" .. action, color, "black", false)
           styles = ColoursToStyles("]", adb_options.colors.default, ColourNameToRGB("black"), false, false)
           ColourTell(RGBColourToName(styles[1].textcolour), "black", "]")
         end
@@ -1284,8 +1291,10 @@ function adbOnAIDECommand(name, line, wildcards)
     Solidify = wildcards.solidify,
     Illuminate = wildcards.illuminate,
     Resonate = wildcards.resonate,
+    IR = wildcards.IR,
     removable = wildcards.removable == "removable",
     enchanted = wildcards.enchanted == "enchanted",
+    command = wildcards.command,
   }
   adb_inv_data_queue = {}
 
@@ -1374,14 +1383,22 @@ function adbInvDataDrainIdentifyReadyCB(obj, ctx)
       has_enchant = true
       has_removable_enchant = has_removable_enchant or obj.enchants[v].removable
       local pass = (not ctx.removable or obj.enchants[v].removable) and 
-                   (ctx[v] == "" or (adbGetEnchantSum(obj.enchants[v]) <= tonumber(ctx[v])))
+                   (ctx[v] ~= "" and (adbGetEnchantSum(obj.enchants[v]) <= tonumber(ctx[v])))
       passed_enchant_check = passed_enchant_check or pass
     end
   end
 
   local passes = (has_enchant or not ctx.enchanted) and (has_removable_enchant or not ctx.removable) and (passed_enchant_check or not has_enchant_check)
+
+  if ctx.IR ~= "" then
+    passes = passes and (tonumber(ctx.IR) >= adbGetEnchantSum(obj.enchants["Illuminate"]) + adbGetEnchantSum(obj.enchants["Resonate"]))
+  end
+
   if passes then
     adbProcessIdResults(obj, ctx)
+    if ctx.command ~= "" then
+      Execute(ctx.command .. " " .. obj.stats.id)
+    end
   end
   adbInvDataQueueDrain()
 end

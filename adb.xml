@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.015"
+   version="1.016"
    >
 <description trim="y">
 <![CDATA[
@@ -146,7 +146,7 @@
   TODO: list fields available
   TODO: split help into topics and give more details here.
 
-@Waide [container_id] [enchanted] [removable] [S<num>] [I<num>] [R<num>] [format.name]@w - Enchanters aid.
+@Waide [container_id] [enchanted] [removable] [S<num>] [I<num>] [R<num>] [IR<num>] [format.name] [command.<command>]@w - Enchanters aid.
   This command will identify all matching items in the container or inventory if @Gcontainer_id@w is not specified.
   @Genchanted@w - only show items which have one or more enchants present
   @Gremovable@w - only show items which have one or more removable (by enchanter) enchants
@@ -154,10 +154,12 @@
   @GS<num>@w - show items with Solidify giving <= @G<num>@w HR/DR.
   @GI<num>@w - show items with Illuminate giving <= @G<num>@w Stats.
   @GR<num>@w - show items with Resonate giving <= @G<num>@w Stats.
+  @GIR<num>@w - show items with Resonate + Solidify giving <= @G<num>@w Stats.
     If more 2 or more of the SIR parameters are present then items matching at least one of the given checks will be shown.
     If @Gremovable@w options is given, then only items with removable SIR enchants passing the comparision will be shown.
 
-  @Gformat.name - format to use with Identify output, defaults to @Wcockpit.aide_format@w option.
+  @Gformat.name@w - format to use with Identify output, defaults to @Wcockpit.aide_format@w option.
+  @Gcommand.<command>@w - execute given command after showing item info. Item ID will be appended to given command.
 
   Examples:
     @Waide@w - identify all items in inventory
@@ -200,6 +202,9 @@
     @WNote:@w If disechant_hyperlinks is set in the @Gformat@w used, then you'll see a clickable Hyperlink to remove any
     of removable enchants for the particular item. Hyperlink command will take item out of container and put it back after
     disenchanting if necessary.
+
+    @Waide S5 I0 R0 command.drop@w - drop all items from inventory which have Solidify enchant giving less than 6 HR/DR.
+    @WNote@w Make sure to dry run query without command... to see what items gonna be affected
 
 @Wadb [off|on]@w - disable or enable auto actions.
   It's the same as typing longer command:
@@ -255,6 +260,12 @@ TODO: move changelog to separate entry
   1.015
   Added lvl difference to blood diff display.
   Fix "aid" error for items which are not in bags.
+  1.016
+  Fix error when looting crumbling items while one-shotting mobs
+  aide - show hyperlinks in grey for "good" removable enchants
+  aide - add option to run custom command on matched items
+  aide - not specifying one of S I R options now ignores value of relevant enchant
+  aide - added IR option
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -345,7 +356,7 @@ TODO: move changelog to separate entry
   </alias>
   <alias
    script="adbOnAIDECommand"
-   match="^aide(?: (?<id>\d+))?(?: (?<enchanted>enchanted))?(?: (?<removable>removable))?(?: S(?<solidify>\d+))?(?: I(?<illuminate>\d+))?(?: R(?<resonate>\d+))?(?: (?<format>format\..+))?$"
+   match="^aide(?: (?<id>\d+))?(?: (?<enchanted>enchanted))?(?: (?<removable>removable))?(?: S(?<solidify>\d+))?(?: I(?<illuminate>\d+))?(?: R(?<resonate>\d+))?(?: IR(?<IR>\d+))?(?: (?<format>format\..+))?(?: command\.(?<command>.+))?$"
    regexp="y"
    enabled="y"
    send_to="12"
