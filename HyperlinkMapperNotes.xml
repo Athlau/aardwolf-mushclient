@@ -107,9 +107,11 @@ function OnPluginBroadcast(msg, id, name, text)
         local rc, cexits = CallPlugin("b6eae87ccedd84f510b74714", "room_cexits", roomid)
         if (rc == error_code.eOK) then
           local cexits = loadstring(string.format("return %s", cexits))()
-          for k, v in pairs(cexits) do
-            Hyperlink(k, k .. " -> [" .. v .. "]", "click to " .. k, "cyan", "blue", false, true)
-            Note()
+          if cexits ~= nil then
+            for k, v in pairs(cexits) do
+              Hyperlink(k, k .. " -> [" .. v .. "]", "click to " .. k, "cyan", "blue", false, true)
+              Note()
+            end
           end
         end
       end
