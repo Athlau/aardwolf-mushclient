@@ -1397,7 +1397,11 @@ function adbInvDataDrainIdentifyReadyCB(obj, ctx)
   if passes then
     adbProcessIdResults(obj, ctx)
     if ctx.command ~= "" then
-      Execute(ctx.command .. " " .. obj.stats.id)
+      local command = ctx.command .. " " .. obj.stats.id
+      if ctx.bagid ~= "" then
+        command = "get " .. item_id .. " " .. ctx.bagid .. "\n" .. command
+      end
+      Execute(command)
     end
   end
   adbInvDataQueueDrain()

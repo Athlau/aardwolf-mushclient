@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.016"
+   version="1.017"
    >
 <description trim="y">
 <![CDATA[
@@ -266,6 +266,8 @@ TODO: move changelog to separate entry
   aide - add option to run custom command on matched items
   aide - not specifying one of S I R options now ignores value of relevant enchant
   aide - added IR option
+  1.017
+  aide - get item from bag if needed before executing command
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
