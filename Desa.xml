@@ -11,7 +11,7 @@
    author="Athlau"
    id="837faf063e6f5fde9733e26f"
    language="Lua"
-   purpose="Autocast desolation without stacking"
+   purpose="Autocast some attack spells without stacking"
    save_state="y"
    date_written="2022-11-19 15:06:56"
    requires="5.07"
@@ -27,7 +27,7 @@
    enabled="y"
    group="desolation"
    keep_evaluating="y"
-   match="^(?:\*)?\[\d+\] Your anguish .*$"
+   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury) does .*$"
    regexp="y"
    sequence="150"
    script="Desa_process_damage"
@@ -68,7 +68,7 @@
   <trigger
    enabled="y"
    group="desolation"
-   match="^Cast desolation on whom\?$"
+   match="^Cast (?<spell>desolation|psychosis) on whom\?$"
    regexp="y"
    send_to="12"
    sequence="100"
@@ -113,6 +113,15 @@
   >
   </alias>
   <alias
+   match="^ps( .*)?$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+   script="Psychosis_cast"
+  >
+  </alias>
+  <alias
    match="^desc$"
    enabled="y"
    regexp="y"
@@ -130,11 +139,30 @@ require "wait"
 local desolation_ignore_untill_prompt = false
 local desolation_stack_size = 0
 
+damage_to_command = {
+  ["anguish"] = "des",
+  ["blast of fury"] = "ps",
+}
+
+function Desa_cast(name, line, wildcards)
+    local target = wildcards[1] or ""
+    Send("c 'desolation' "..target)
+    AddDesolationStack(1)
+    Note("stack "..tostring(desolation_stack_size))
+end
+
+function Psychosis_cast(name, line, wildcards)
+    local target = wildcards[1] or ""
+    Send("c 'psychosis' "..target)
+    AddDesolationStack(1)
+    Note("stack "..tostring(desolation_stack_size))
+end
+
 function Desa_prompt()
   desolation_ignore_untill_prompt = false
 end
 
-function Desa_process_damage()
+function Desa_process_damage(name, line, wildcards)
   Note("trig")
   wait.make(function()
     wait.time(0.01)
@@ -143,9 +171,8 @@ function Desa_process_damage()
       --Note("stack "..tostring(desolation_stack_size))
     else
       local stack = AddDesolationStack(-1)
-      --Note("stack "..tostring(desolation_stack_size))
       if stack == 0 then
-        Execute("des")
+        Execute(damage_to_command[wildcards.spell])
       end
       desolation_ignore_untill_prompt = true
     end
@@ -153,30 +180,15 @@ function Desa_process_damage()
 end
 
 function Desa_decrease()
-  --wait.make(function()
-    --wait.time(0.01)
     AddDesolationStack(-1)
-    --Note("stack "..tostring(desolation_stack_size))
-  --end)
 end
 
 function Desa_clear(name, line, wildcards)
   AddDesolationStack(-desolation_stack_size)
 end
 
-function Desa_cast(name, line, wildcards)
-  --wait.make(function()
-    --wait.time(0.3)
-    local target = wildcards[1] or ""
-    Send("c 'desolation' "..target)
-    AddDesolationStack(1)
-    Note("stack "..tostring(desolation_stack_size))
-  --end)
-end
-
 function AddDesolationStack(value)
   desolation_stack_size = math.max(0, desolation_stack_size + value)
-  --Note("stack "..tostring(desolation_stack_size))
   return desolation_stack_size
 end
 
