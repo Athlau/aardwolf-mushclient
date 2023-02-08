@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2022-11-09 20:15:43"
    requires="5.07"
-   version="1.01"
+   version="1.02"
    >
 <description trim="y">
 <![CDATA[
@@ -104,13 +104,16 @@ function OnPluginBroadcast(msg, id, name, text)
 
       -- add Hyperlinks with cexits
       if client_version >= min_version then
-        local rc, cexits = CallPlugin("b6eae87ccedd84f510b74714", "room_cexits", roomid)
-        if (rc == error_code.eOK) then
-          local cexits = loadstring(string.format("return %s", cexits))()
-          if cexits ~= nil then
-            for k, v in pairs(cexits) do
-              Hyperlink(k, k .. " -> [" .. v .. "]", "click to " .. k, "cyan", "blue", false, true)
-              Note()
+        -- don't show cexits while running
+        if gmcp("char.status.state") ~= "12" then
+          local rc, cexits = CallPlugin("b6eae87ccedd84f510b74714", "room_cexits", roomid)
+          if (rc == error_code.eOK) then
+            local cexits = loadstring(string.format("return %s", cexits))()
+            if cexits ~= nil then
+              for k, v in pairs(cexits) do
+                Hyperlink(k, k .. " -> [" .. v .. "]", "click to " .. k, "cyan", "blue", false, true)
+                Note()
+              end
             end
           end
         end
