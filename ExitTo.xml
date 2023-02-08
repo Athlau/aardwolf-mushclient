@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2022-12-11 14:58:25"
    requires="5.07"
-   version="1.0"
+   version="1.01"
    >
 
 </plugin>
@@ -99,7 +99,7 @@ local target_exit = ""
 local last_room = -1
 local target_maze_room = ""
 local solving_maze = false
-local timeout = 30
+local timeout = 60
 local start_time = 0
 local maze_to_no_resume_once = false
 
@@ -158,8 +158,15 @@ function MazeToMoved(msg, id, name, text)
       end
       maze_to_no_resume_once = false
     else
-      Note("in room "..roomid.." continuing")
-      DoMove()
+      if last_room ~= roomid then
+        Note("in room "..roomid.." continuing")
+        last_room = roomid
+        DoMove()
+      else
+        Note("Still in room "..roomid.." looks like maze_to failed!")
+        solving_maze = false
+        EnableTriggerGroup("mazeto", 0)
+      end
     end
   end
 end
