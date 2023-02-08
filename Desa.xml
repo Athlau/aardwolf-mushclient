@@ -27,7 +27,7 @@
    enabled="y"
    group="desolation"
    keep_evaluating="y"
-   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury) does .*$"
+   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury) .*$"
    regexp="y"
    sequence="150"
    script="Desa_process_damage"
