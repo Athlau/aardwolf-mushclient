@@ -47,7 +47,8 @@ Plugin to simplify controller task in Transcendence epic.
 ![image](https://user-images.githubusercontent.com/118027636/214983696-e29adcb9-0014-495a-8beb-afc17555dbd0.png)
 
 # ExitTo.xml
-Allows you to make mapper cexits to a direction with a given room name.
+Allows you to make mapper cexits to a direction with a given room name
+or minimap output.
 Good example is Vlad entrance, where room [15973] always have exit to
 "Before the Grand Gates of Castle Vlad-Shamir" but direction changes.
 Can be easily added to mapper like this:
@@ -55,8 +56,20 @@ Can be easily added to mapper like this:
 mapper cexit exit_to Before the Grand Gates of Castle Vlad-Shamir;;wait(0.3)
 ```
 
-Also have maze_to command, which uses separate maze-solver plugin to get to given room #
+Instead of "hunting Pete" one could do something like this:
+```
+maze_to_noresume_once
+In [34037] Winding tunnels (G), mapper cexit wait(0.1);maze_to 34042;wait(30)
+In [34042] Winding tunnels, mapper cexit wait(0.1);;minimap_to [ . >|];;wait(0.1)
+```
+
+Also have maze_to command, which uses separate maze-solver plugin (Trachx_MazeSolver.xml) to get to given room #
 That's somewhat experimental and has some bugs, but works in most cases.
+```
+In [19648] The Skullgore Plain, mapper cexit wait(0.1);;maze_to 19652;;wait(30)
+In [19652] The Skullgore Plain, mapper cexit exit_to The Dark Path;;wait(0.1)
+```
+
 
 # Desa.xml
 Tiny plugin without help.

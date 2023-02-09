@@ -71,6 +71,15 @@
   >
   </alias>
   <alias
+   match="minimap_to [*]"
+   enabled="y"
+   expand_variables="y"
+   send_to="12"
+   sequence="100"
+   script="MinimapTo"
+  >
+  </alias>
+  <alias
    match="maze_to_noresume_once"
    enabled="y"
    expand_variables="y"
@@ -94,6 +103,8 @@
 <script>
 <![CDATA[
 require "gmcphelper"
+require "wrapped_captures"
+dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 local target_exit = ""
 local last_room = -1
@@ -102,15 +113,125 @@ local solving_maze = false
 local timeout = 60
 local start_time = 0
 local maze_to_no_resume_once = false
+local minimap_target = ""
 
 help_message = [[
-   Examples:
+   I'm so lazy to write the help...
+   Use one of:
+   exit_to <name>
+   maze_to <room number>
+   minimap_to [xXxXx]
+
+   exit_to example:
    In [15973] mapper cexit exit_to Before the Grand Gates of Castle Vlad-Shamir;;wait(0.3)
+
+   maze_to example:
    In [19648] The Skullgore Plain, mapper cexit wait(0.5);;maze_to 19652;;wait(30)
    In [19652] The Skullgore Plain, mapper cexit exit_to The Dark Path;;wait(0.1)
+
    Note: before adding "maze_to" cexits in mapper, use maze_to_noresume_once so that it doesn't
          auto resume when hitting target room
+
+   minimap_to example:
+   In [34037] Winding tunnels (G), mapper cexit wait(0.1);maze_to 34042;wait(30)
+   In [34042] Winding tunnels, mapper cexit wait(0.1);;minimap_to [ . >|];;wait(0.1)
+
+   Note: minimap_to string in [] should appear as in ASCII based map, see "help maptype" in game.
+   If you want to copy-paste run "map" command in game (If you're using default minimap window
+   plugin make sure it's options "Also Show Map in Main Output" is enabled in right-click menu).
+   Allow of the above is only needed if you're not sure what pattern should be used in [],
+   minimap_to itself works regardless of maptype or minimap window plugin settings.
 ]]
+
+function MinimapTo(name, line, wildcards)
+  minimap_target = wildcards[1]
+  Capture.tagged_output(
+    "map",
+    "<MAPSTART>",
+    "<MAPEND>",
+    false,
+    true,
+    true,
+    true,
+    minimapReadyCB,
+    false
+  )
+end
+
+function minimapReadyCB(style_lines)
+  local map = {}
+  local lines = {}
+
+  for _, v in ipairs(style_lines) do
+    table.insert(lines, utf8_map_text_to_ascii(strip_colours(StylesToColours(v))))
+  end
+
+  -- first 3 lines are zone name + 2 " "? lines
+  -- last two lines are " " and exits
+  for i = 4, #lines - 3, 2 do
+    local row = (i - 2) / 2
+    map[row] = {}
+    for j = 1, 3 do
+      local line = lines[i + j - 1] 
+      for k = 1, #line, 4 do
+        local col = (k + 3) / 4
+        if map[row][col] == nil then
+          map[row][col] = {}
+        end
+        map[row][col][j] = line:sub(k, k + 4)
+      end
+    end
+  end
+
+  -- right side of rows is often a bit of a mess with spaces
+  -- strip out incomplete rooms there
+  for row = 1, #map do
+    for col = #map[row], 1, -1 do
+      for i = 1, 3 do
+        if map[row][col][i] == nil or #map[row][col][i] < 5 then
+          map[row][col] = nil
+          break;
+        end
+      end
+    end
+  end
+
+  -- find player location
+  local prow, pcol = find_player(map)
+
+  if prow == nil or pcol == nil then
+    Note("Something is off, can't find player on minimap!")
+    return
+  end
+
+  local search = {
+    {-1, 0, "north"},
+    {0, -1, "west"},
+    {0, 1, "east"},
+    {1, 0, "south"}
+  }
+
+  for _, v in ipairs(search) do
+    local srow = prow + v[1]
+    local scol = pcol + v[2]
+    if map[srow] and map[scol] and map[srow][scol][2] and map[srow][scol][2]== minimap_target then
+      Send(v[3])
+      return
+    end
+  end
+  Note("minimap_to exit direction not found!")
+end
+
+function find_player(map)
+  for row = 1, #map do
+    for col = 1, #map[row] do
+      if string.find(map[row][col][2], "^..#..$") then
+        return row, col
+      end
+    end
+  end
+  return nil, nil
+end
 
 function MazeToNoResumeOnce(name, line, wildcards)
   Note("not going to auto resume mapper goto command once")
@@ -183,6 +304,60 @@ function OnPluginInstall()
    print("ExitTo loaded.")
    print(help_message)
 end
+
+---- borrowed from Fiendish's aard_ASCII_map.xml ----
+
+--E294xx
+utf8_2_ascii = {
+["82"]="7C", -- |
+["80"]="2D", -- -
+["8C"]="20",
+["90"]="20",
+["98"]="20",
+["94"]="20",
+["AC"]="20", -- vertical end cap T
+["B4"]="20", -- vertical end cap T
+["A4"]="7C",
+["9C"]="7C"
+}
+
+--E295xx
+utf8_2_ascii2 = {
+["91"]="7C", -- ||
+["90"]="2D", -- =
+["A5"]="20",
+["9D"]="20",
+["9A"]="20",
+["94"]="20",
+["97"]="20",
+["A8"]="20",
+["A3"]="7C",
+["A0"]="7C",
+["A9"]="2D",
+["A6"]="2D"
+}
+
+function utf8_map_text_to_ascii(text)
+   text = utils.tohex(text)
+
+   -- replace vertical three way intersections with "-"
+   text = string.gsub(text, "E29480E294B4E29480", "2D2D2D")
+   text = string.gsub(text, "E29480E294ACE29480", "2D2D2D")
+
+   -- drop extra long ends
+   text = string.gsub(text, "E2948020", "2020") -- "- "
+   text = string.gsub(text, "20E29480", "2020") -- " -"
+   text = string.gsub(text, "E2959020", "2020") -- "= "
+   text = string.gsub(text, "20E29590", "2020") -- " ="
+   text = string.gsub(text, "E29480$", "20") -- "- "
+   text = string.gsub(text, "^E29480", "20") -- " -"
+   text = string.gsub(text, "E29590$", "20") -- "= "
+   text = string.gsub(text, "^E29590", "20") -- " ="
+
+   text = string.gsub(text, "E294(%x%x)", utf8_2_ascii)
+   return utils.fromhex(string.gsub(text, "E295(%x%x)", utf8_2_ascii2))
+end
+
 ]]>
 </script>
 
