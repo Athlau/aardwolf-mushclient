@@ -6,6 +6,13 @@ require "wait"
 require "wrapped_captures"
 dofile(GetPluginInfo(GetPluginID(), 20).."adb_id.lua")
 
+local adb_state = {
+  adb_off_for_current_zone = false,
+  auto_adb_off_for_zones = {},
+  ignore_db_updates_for_items = {},
+  ignore_aucto_actions_for_items = {},
+}
+
 local adb_options = {}
 
 local adb_options_description = {
@@ -41,7 +48,7 @@ local adb_options_description = {
 
 function adbGetDefaultOptions()
   local default_options = {
-    version = "1.004",
+    version = "1.005",
     auto_actions = {
       on_bloot_looted_cmd = "gtell just looted;aid %item gtell;aid %item",
       on_bloot_looted_lua = "if %bloot>5 then SendNoEcho(\"say Looted good bloot %bloot %colorName\") end",
@@ -62,6 +69,30 @@ function adbGetDefaultOptions()
       cache_added_format = "format.full",
       db_find_format = "format.db",
       max_cache_size = 500,
+      ignore_db_updates_for_items =
+[[^\(Aarchaeology\)
+^AardWords \(TM\)
+^\|(2|3|4|5|6|7|8|9|10|M|D|E|A)\[(Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Mephit|Demon|Elemental|Ace) of (Fire|Water|Air|Earth)\]\1\|
+]],
+      ignore_aucto_actions_for_items =
+[[^\(Aarchaeology\)
+^AardWords \(TM\)
+^\|(2|3|4|5|6|7|8|9|10|M|D|E|A)\[(Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Mephit|Demon|Elemental|Ace) of (Fire|Water|Air|Earth)\]\1\|
+scarred:a miner's pick
+scarred:head of a dragonsnake
+knossos:a jeweled bracelet
+deathtrap:::\[=== Sword of War ===-
+]],
+      auto_adb_off_for_zones =
+[[icefall
+oradrin
+winds
+inferno
+transcend
+geniewish
+terra
+titan
+]],
     },
     colors = {
       default = "@D",
@@ -233,6 +264,13 @@ function adbCheckOptions()
     adb_options.cockpit.aide_format = "format.enchanter"
   end
 
+  if adb_options.version == "1.004" then
+    adb_options.version = "1.005"
+    adb_options.cockpit.ignore_db_updates_for_items = adbGetDefaultOptions().cockpit.ignore_db_updates_for_items
+    adb_options.cockpit.ignore_aucto_actions_for_items = adbGetDefaultOptions().cockpit.ignore_aucto_actions_for_items
+    adb_options.cockpit.auto_adb_off_for_zones = adbGetDefaultOptions().cockpit.auto_adb_off_for_zones
+  end
+
   if adb_options.version ~= adbGetDefaultOptions().version then
     adbInfo("ADB options stored are too old, resetting to defaults!")
     adb_options = copytable.deep(adbGetDefaultOptions())
@@ -242,8 +280,43 @@ function adbCheckOptions()
     adb_options.cockpit.max_cache_size = adbGetDefaultOptions().cockpit.max_cache_size
   end
 
+  adb_state.auto_adb_off_for_zones = {}
+  for line in adb_options.cockpit.auto_adb_off_for_zones:gmatch("[^\r\n]+") do
+    adb_state.auto_adb_off_for_zones[line] = true
+  end
+
+  adb_state.ignore_aucto_actions_for_items = {}
+  adbZonePatternStringLinesToTable(adb_options.cockpit.ignore_aucto_actions_for_items, adb_state.ignore_aucto_actions_for_items)
+
+  adb_state.ignore_db_updates_for_items = {}
+  adbZonePatternStringLinesToTable(adb_options.cockpit.ignore_db_updates_for_items, adb_state.ignore_db_updates_for_items)
+
   EnableTrigger("adbBlootNameTrigger", adb_options.cockpit.show_bloot_level)
   EnableTriggerGroup("adbLootTriggerGroup", adb_options.cockpit.update_db_on_loot or adb_options.cockpit.enable_auto_actions)
+end
+
+function adbZonePatternStringLinesToTable(str, tbl)
+  for line in str:gmatch("[^\r\n]+") do
+    local zone, pattern
+    _, _, zone, pattern = line:find("^(%a+):(.*)$")
+    if zone == nil then
+      zone = "all"
+      pattern = line
+    end
+
+    if tbl[zone] == nil then
+      tbl[zone] = {}
+    end
+
+    local ok, re
+    ok, re = pcall(rex.new, pattern)
+    if ok then
+      adbDebug("Added " .. zone .. ":" .. pattern .. " " .. tostring(re), 2)
+      table.insert(tbl[zone], re)
+    else
+      adbInfo("Failed to compile regex {" .. pattern .. "} for zone [" .. zone .. "] with error: " .. re)
+    end
+  end
 end
 
 function adbOnOptionsResetCommand()
@@ -304,6 +377,13 @@ function adbOnOptionsEditCommand(name, line, wildcards)
       local cmd = utils.editbox("Edit " .. key1 .. "." .. key2, "ADB", adb_options[key1][key2])
       if cmd == nil then return end
       adb_options[key1][key2] = cmd
+    elseif key1 == "cockpit" and (key2 == "ignore_db_updates_for_items" or
+                                  key2 == "ignore_aucto_actions_for_items" or
+                                  key2 == "auto_adb_off_for_zones") then
+      local list = utils.editbox("Edit " .. key1 .. "." .. key2, "ADB", adb_options[key1][key2]:gsub("\n", "\r\n"))
+      if list == nil then return end
+      list = list:gsub("\r\n", "\n")
+      adb_options[key1][key2] = list
     else
       local value = utils.inputbox("Edit " .. key1 .. "." .. key2, "ADB", adb_options[key1][key2])
       if value == nil then return end
@@ -750,7 +830,8 @@ function adbOnItemLooted(id, item)
     return
   end
 
-  if not adb_options.cockpit.enable_auto_actions then
+  if not adb_options.cockpit.enable_auto_actions or adb_state.adb_off_for_current_zone or
+     adbIsItemIgnored(item.stats.name, item.location.zone, adb_state.ignore_aucto_actions_for_items) then
     return
   end
 
@@ -774,9 +855,35 @@ function adbOnItemLooted(id, item)
   end
 end
 
+function adbIsItemIgnored(name, zone, tbl)
+  adbDebug("adbIsItemIgnored [" .. name .. "] [" .. zone .. "]", 2)
+
+  if tbl[zone] ~= nil then
+    for _, v in ipairs(tbl[zone]) do
+      if v:match(name) then
+        adbDebug("Skipping ignored item " .. name .. " [" .. zone .. "]", 2)
+        return true
+      end
+    end
+  end
+
+  if tbl["all"] ~= nil then
+    for _, v in ipairs(tbl["all"]) do
+      if v:match(name) then
+        adbDebug("Skipping ignored item " .. name, 2)
+        return true
+      end
+    end
+  end
+
+  adbDebug("not ignored", 2)
+  return false
+end
+
 function adbOnBlootItemLooted(id, drain_loot_item)
   adbDebug("adbOnBlootItemLooted " .. id .. " " .. drain_loot_item.name, 2)
-  if not adb_options.cockpit.enable_auto_actions or
+  if not adb_options.cockpit.enable_auto_actions or adb_state.adb_off_for_current_zone or
+     adbIsItemIgnored(drain_loot_item.name, drain_loot_item.zone, adb_state.ignore_aucto_actions_for_items) or
      (adb_options.auto_actions.on_bloot_looted_cmd == "" and adb_options.auto_actions.on_bloot_looted_lua == "") then
     return
   end
@@ -849,7 +956,8 @@ function adbDrainOne()
   local cache_item = adbCacheGetItem(adb_drain_loot_item.colorName, adb_drain_loot_item.zone)
   if cache_item ~= nil then
     adbDebug(adb_drain_loot_item.colorName.." found in cache", 4)
-    if adb_options.cockpit.update_db_on_loot then
+    if adb_options.cockpit.update_db_on_loot and
+       not adbIsItemIgnored(adb_drain_loot_item.name, adb_drain_loot_item.zone, adb_state.ignore_db_updates_for_items) then
         adbCacheItemAddMobs(cache_item, {adbCreateMobFromLootItem(adb_drain_loot_item)})
 
         -- we have old item in cache/db, inentify again
@@ -870,7 +978,9 @@ function adbDrainOne()
     return
   end
 
-  if adb_options.cockpit.update_db_on_loot then
+  if (adb_options.cockpit.update_db_on_loot and
+      not adbIsItemIgnored(adb_drain_loot_item.name, adb_drain_loot_item.zone, adb_state.ignore_db_updates_for_items)) or
+     not adbIsItemIgnored(adb_drain_loot_item.name, adb_drain_loot_item.zone, adb_state.ignore_aucto_actions_for_items) then
     local ctx = {
       drain_inv_item = adb_drain_inv_item,
       drain_loot_item = adb_drain_loot_item,
@@ -932,19 +1042,21 @@ function adbDrainIdResultsReadyCB(item, ctx)
 
   -- TODO: not sure if "same" items could be carried by mobs in different zones
   -- for now going to have location.zone which is set to first mob's zone
-  if ctx.cache_item == nil then
-    item.location = {
-      zone = ctx.drain_loot_item.zone,
-      mobs = {},
-    }
-    adbItemLocationAddMob(item, adbCreateMobFromLootItem(ctx.drain_loot_item))
-    adbCacheAdd(item)
-  else
-    -- if identify had to queue this call, cache_item was copied and no longer
-    -- references actual table in recent cache.
-    local cache_item = adb_recent_cache[adbCacheGetKey(ctx.cache_item.colorName, ctx.cache_item.location.zone)]
-    assert(cache_item)
-    adbCacheItemUpdateIdentify(cache_item, item)
+  if not adbIsItemIgnored(ctx.drain_loot_item.name, ctx.drain_loot_item.zone, adb_state.ignore_db_updates_for_items) then
+    if ctx.cache_item == nil then
+      item.location = {
+        zone = ctx.drain_loot_item.zone,
+        mobs = {},
+      }
+      adbItemLocationAddMob(item, adbCreateMobFromLootItem(ctx.drain_loot_item))
+      adbCacheAdd(item)
+    else
+      -- if identify had to queue this call, cache_item was copied and no longer
+      -- references actual table in recent cache.
+      local cache_item = adb_recent_cache[adbCacheGetKey(ctx.cache_item.colorName, ctx.cache_item.location.zone)]
+      assert(cache_item)
+      adbCacheItemUpdateIdentify(cache_item, item)
+    end
   end
 
   adbOnItemLooted(item.stats.id, item)
@@ -2468,6 +2580,16 @@ function OnPluginBroadcast(msg, id, name, text)
         adbDebug("-> out of combat", 4)
         was_in_combat = false       
         adbDrainStacks()
+      end
+    elseif text == "room.info" then
+      local off = adb_state.auto_adb_off_for_zones[gmcp("room.info.zone")] or false
+      if off ~= adb_state.adb_off_for_current_zone then
+        adb_state.adb_off_for_current_zone = off
+        if off then
+          adbInfo("Aucto actions are OFF: Entered ignored area " .. gmcp("room.info.zone"))
+        else
+          adbInfo("Aucto actions are " .. (adb_options.cockpit.enable_auto_actions and "ON" or "OFF") .. ": Left ignored area")
+        end
       end
     end
   end

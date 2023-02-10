@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.017"
+   version="1.018"
    >
 <description trim="y">
 <![CDATA[
@@ -120,6 +120,25 @@
    For now you can check options under "format.brief" and "format.full"
 
  @Wdb_find_format <format.name>@w - default "adb find" output format.
+
+ @Wauto_adb_off_for_zones@w - a list of zones where ADB will not execute any of auto_actions for
+ looted items.
+ Defaults to list of EPICs. Use @Wadb options edit@w to edit.
+
+ @Wignore_aucto_actions_for_items@w - a list of item names (with optional zone name) to skipped
+ when executing auto actions. Defaults to some "special" items needed for goals, getting keys as
+ well as various @R(@YAarchaeology@R)@w, @RAardWords@w etc.
+ See note below for more details. Use @Wadb options edit@w to edit.
+
+ @Wignore_db_updates_for_items@w - a list of item names (with optional zone name) to skip from
+ automatically adding/updating the DB. Defaults to various @R(@YAarchaeology@R)@w, @RAardWords@w, etc.
+ Because those are random drop and it doesn't make much sense storing information where it was looted
+ from. See note below for more details. Use @Wadb options edit@w to edit.
+
+ @WNote:@w Lines for items ignore list should be formed like this:
+ @G[<zone name>:]<item name regex>@w
+ If @G[<zone name>:]@w is not present, setting will apply to all zones.
+ See default options for some examples.
 
 @Wadb format add format.<newname> [<existing name>]@w - adds new output format with specified <new name>
   and copies settings from existing format. After adding a format you can change it's settings
@@ -268,6 +287,11 @@ TODO: move changelog to separate entry
   aide - added IR option
   1.017
   aide - get item from bag if needed before executing command
+  1.018
+  Added items ignore list to exclude from auto actions (special items needed to get keys etc)
+  Added items ignore list to exclude from db updates (random aarch, aardword etc)
+  Added zones list to switch adb off automatically (welcome to EPICS!)
+  Check cockpit options for more details.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
