@@ -27,7 +27,7 @@
    enabled="y"
    group="desolation"
    keep_evaluating="y"
-   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury) .*$"
+   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury|bone-crunching force|neural overload) .*$"
    regexp="y"
    sequence="150"
    script="Desa_process_damage"
@@ -38,7 +38,7 @@
   <trigger
    enabled="y"
    group="desolation"
-   match="^You don't have enough mana to cast 'desolation'\.$"
+   match="^You don't have enough mana to cast '(?<spell>desolation|psychosis|spasm|neural overload)'\.$"
    regexp="y"
    send_to="12"
    sequence="100"
@@ -68,7 +68,7 @@
   <trigger
    enabled="y"
    group="desolation"
-   match="^Cast (?<spell>desolation|psychosis) on whom\?$"
+   match="^Cast (?<spell>desolation|psychosis|spasm|neural overload) on whom\?$"
    regexp="y"
    send_to="12"
    sequence="100"
@@ -109,18 +109,40 @@
    regexp="y"
    send_to="12"
    sequence="100"
-   script="Desa_cast"
   >
+  <send>Desa_cast("%1", "desolation")</send>
   </alias>
+
   <alias
    match="^ps( .*)?$"
    enabled="y"
    regexp="y"
    send_to="12"
    sequence="100"
-   script="Psychosis_cast"
   >
+  <send>Desa_cast("%1", "psychosis")</send>
   </alias>
+
+  <alias
+   match="^spasm( .*)?$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>Desa_cast("%1", "spasm")</send>
+  </alias>
+
+  <alias
+   match="^no( .*)?$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>Desa_cast("%1", "neural overload")</send>
+  </alias>
+
   <alias
    match="^desc$"
    enabled="y"
@@ -142,18 +164,12 @@ local desolation_stack_size = 0
 damage_to_command = {
   ["anguish"] = "des",
   ["blast of fury"] = "ps",
+  ["bone-crunching force"] = "spasm",
+  ["neural overload"] = "no",
 }
 
-function Desa_cast(name, line, wildcards)
-    local target = wildcards[1] or ""
-    Send("c 'desolation' "..target)
-    AddDesolationStack(1)
-    Note("stack "..tostring(desolation_stack_size))
-end
-
-function Psychosis_cast(name, line, wildcards)
-    local target = wildcards[1] or ""
-    Send("c 'psychosis' "..target)
+function Desa_cast(target, spell)
+    Send("cast " .. "'" .. spell .. "' " ..target)
     AddDesolationStack(1)
     Note("stack "..tostring(desolation_stack_size))
 end
