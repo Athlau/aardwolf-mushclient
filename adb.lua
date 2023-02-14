@@ -1567,7 +1567,10 @@ function adbOnAdbShopListReady(style_lines)
     _, _, number, level, price, qty, name = line:find("^%s*(%d+)%s+(%d+)%s+(%d+)%s+(%S+)%s+(.-)$")
 
     if number ~= nil then
-      _, _, color_name = color_line:find("^@w%s*%d+%s+%d+%s+%d+%s+%S+%s+(.-)@?w?$")
+      _, _, color_name = color_line:find("^@w%s*%d+%s+%d+%s+%d+%s+%S+%s+(.-)@w$")
+      if color_name == nil then
+        _, _, color_name = color_line:find("^@w%s*%d+%s+%d+%s+%d+%s+%S+%s+(.-)$")
+      end
       if color_name == nil then
         adbErr("Can't parse color name in [" .. color_line .. "]")
       elseif adb_shop_ctx.all ~= "all" and qty ~= "---" then
