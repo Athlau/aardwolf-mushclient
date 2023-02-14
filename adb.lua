@@ -1392,8 +1392,6 @@ function adbOnAIDECommand(name, line, wildcards)
   if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
     adbInfo("Unknown format " .. wildcards.format .. " using default")
   end
-  --TODO add default format
-  --adb_options.cockpit.identify_format
   local identify_format = adb_options[wildcards.format] and adb_options[wildcards.format] or adb_options[adb_options.cockpit.aide_format]
 
   adb_aide_ctx = {
@@ -1461,8 +1459,7 @@ function adbInvDataQueueDrain()
     adbInfo("AIDE finished.")
     return
   end
-  --TODO: disable show_bloot_level while running this?
-  --EnableTrigger("adbBlootNameTrigger", adb_options.cockpit.show_bloot_level)
+
   local item_id = table.remove(adb_inv_data_queue, 1)
   local cmd = "id " .. item_id
   if adb_aide_ctx.bagid ~= "" then
@@ -1518,6 +1515,418 @@ function adbInvDataDrainIdentifyReadyCB(obj, ctx)
   end
   adbInvDataQueueDrain()
 end
+
+------ Adb shop ------
+local adb_shop_busy = false
+local adb_shop_ctx = nil
+local adb_shop_queue = nil
+
+function adbOnAdbShop(name, line, wildcards)
+  if adb_shop_busy then
+    adbInfo("adb shop is already running, please retry when current operation finishes.")
+    return
+  end
+  if gmcp("char.status.state") ~= "3" then
+    adbInfo("Can't run adb shop in current character state.")
+    return
+  end
+
+  adb_shop_busy = true
+  adbInfo(line)
+
+  adb_shop_ctx = {
+    all = wildcards.all,
+    zone = gmcp("room.info.zone"),
+    room = gmcp("room.info.num"),
+  }
+  adb_shop_queue = {},
+
+  Capture.untagged_output(
+    "list",
+    true,
+    true,
+    true,
+    adbOnAdbShopListReady,
+    false
+  )
+end
+
+function adbOnAdbShopListReady(style_lines)
+  adbDebug("adbOnAdbShopListReady", 2)
+  for _, v in ipairs(style_lines) do
+    local color_line = StylesToColours(v)
+    local line = strip_colours(color_line)
+
+    if line == "There is no shopkeeper here." then
+      adb_shop_busy = false
+      adbInfo("There is no shopkeeper here.")
+      return
+    end
+
+    local number, level, price, qty, name, color_name
+    _, _, number, level, price, qty, name = line:find("^%s*(%d+)%s+(%d+)%s+(%d+)%s+(%S+)%s+(.-)$")
+
+    if number ~= nil then
+      _, _, color_name = color_line:find("^@w%s*%d+%s+%d+%s+%d+%s+%S+%s+(.-)@?w?$")
+      if color_name == nil then
+        adbErr("Can't parse color name in [" .. color_line .. "]")
+      elseif adb_shop_ctx.all ~= "all" and qty ~= "---" then
+        adbDebug("Skipping limited qty item " .. color_name, 2)
+      elseif adbGetBlootLevel(name) > 0 then
+        adbDebug("Skipping bloot item " .. color_name, 2)
+      else
+        local cache_item = nil
+        if qty == "---" then
+          cache_item = adbCacheGetItem(color_name, adb_shop_ctx.zone)
+        else
+          -- Can do something like
+          -- cache_item = adbCacheGetItemByName(color_name)
+          -- but that would mean we might actually miss the items with same name from different zones.
+          -- So will identify item and check to be sure.
+        end
+
+        if cache_item ~= nil then
+          -- TODO check if need to update identify version, full/partial id etc.
+          if adb_options.cockpit.show_db_cache_hits then
+            AnsiNote(ColoursToANSI("@CADB item already in cache: @w[" .. color_name .. "@w]"))
+          end
+        else
+          local t = {
+            number = number,
+            level = level,
+            price = price,
+            qty = qty,
+            name = name,
+            colorName = color_name,
+          }
+          table.insert(adb_shop_queue, t)
+        end
+      end
+    end
+  end
+
+  if #adb_shop_queue == 0 then
+    adbInfo("adb shop found no items to update")
+    adb_shop_busy = false
+    return
+  end
+
+  adbInfo("adb shop checking " .. #adb_shop_queue .. " item(s).")
+  adbShopQueueDrain()
+end
+
+function adbShopQueueDrain()
+  if #adb_shop_queue == 0 then
+    adb_shop_busy = false
+    adbInfo("adb shop finished.")
+    return
+  end
+
+  adb_shop_ctx.item = table.remove(adb_shop_queue, 1)
+  adbIdentifyItem("appraise " .. adb_shop_ctx.item.number, adbShopIdreadyCB, adb_shop_ctx)
+end
+
+function adbShopIdreadyCB(obj, ctx)
+  if obj.stats.id == nil then
+    adbErr("Failed to appraise " .. ctx.item.number)
+    adbShopQueueDrain()
+    return
+  end
+
+  -- TODO check if need to update identify version, full/partial id etc.
+  if ctx.item.qty == "---" then
+    obj.location = {
+      zone = ctx.zone,
+      mobs = {},
+    }
+    mob = {
+      name = "shopkeeper",
+      colorName = "@Yshopkeeper",
+      rooms = tostring(ctx.room),
+      zone = ctx.zone,
+    }
+    table.insert(obj.location.mobs, mob)
+    adbCacheAdd(obj)
+  else
+    cache_item = adbCacheGetItemByNameAndFoundAt(obj.colorName, obj.stats.foundat)
+    if cache_item == nil then
+      if adbAreaNameXref[obj.stats.foundat] ~= nil then
+        obj.location = {
+          zone = adbAreaNameXref[obj.stats.foundat],
+          mobs = {},
+        }
+        adbCacheAdd(obj)
+      else
+        adbErr("Don't know short zone name for " .. obj.stats.foundat)
+      end
+    else
+      AnsiNote(ColoursToANSI("@CADB item already in cache: @w[" .. obj.colorName .. "@w]"))
+    end
+  end
+
+  adbShopQueueDrain()
+end
+
+-- borrowed the list from s&d
+adbAreaNameXref = {
+  ["A Genie's Last Wish"] = "geniewish",
+  ["A Magical Hodgepodge"] = "hodgepodge",
+  ["A Peaceful Giant Village"] = "village",
+  ["Aardington Estate"] = "aardington",
+  ["Aardwolf Zoological Park"] = "zoo",
+  ["Adventures in Sendhia"] = "sendhian",
+  ["Aerial City of Cineko"] = "cineko",
+  ["Afterglow"] = "afterglow",
+  ["Alagh, the Blood Lands"] = "alagh",
+  ["All in a Fayke Day"] = "fayke",
+  ["Ancient Greece"] = "greece",
+  ["Andolor's Ocean Adventure Park"] = "oceanpark",
+  ["Annwn"] = "annwn",
+  ["Anthrox"] = "anthrox",
+  ["Arboretum"] = "arboretum",
+  ["Arisian Realm"] = "arisian",
+  ["Art of Melody"] = "melody",
+  ["Artificer's Mayhem"] = "mayhem",
+  ["Ascension Bluff Nursing Home"] = "nursing",
+  ["Atlantis"] = "atlantis",
+  ["Avian Kingdom"] = "avian",
+  ["Battlefields of Adaldar"] = "adaldar",
+  ["Black Lagoon"] = "lagoon",
+  ["Black Rose"] = "blackrose",
+  ["Brightsea and Glimmerdim"] = "glimmerdim",
+  ["Canyon Memorial Hospital"] = "canyon",
+  ["Castle Vlad-Shamir"] = "vlad",
+  ["Chaprenula's Laboratory"] = "lab",
+  ["Child's Play"] = "childsplay",
+  ["Christmas Vacation"] = "xmas",
+  ["Cloud City of Gnomalin"] = "gnomalin",
+  ["Cradlebrook"] = "cradle",
+  ["Crossroads of Fortune"] = "fortune",
+  ["Crynn's Church"] = "crynn",
+  ["Dark Elf Stronghold"] = "stronghold",
+  ["Death's Manor"] = "manor",
+  ["Deathtrap Dungeon"] = "deathtrap",
+  ["Den of Thieves"] = "thieves",
+  ["Descent to Hell"] = "hell",
+  ["Desert Doom"] = "ddoom",
+  ["Dhal'Gora Outlands"] = "dhalgora",
+  ["Diamond Soul Revelation"] = "dsr",
+  ["Dortmund"] = "dortmund",
+  ["Dread Tower"] = "dread",
+  ["Dusk Valley"] = "duskvalley",
+  ["Earth Plane 4"] = "earthplane",
+  ["Elemental Chaos"] = "elemental",
+  ["Empyrean, Streets of Downfall"] = "empyrean",
+  ["Entrance to Hades"] = "hades",
+  ["Eternal Autumn"] = "autumn",
+  ["Faerie Tales II"] = "ftii",
+  ["Faerie Tales"] = "ft1",
+  ["Fantasy Fields"] = "fantasy",
+  ["Foolish Promises"] = "promises",
+  ["Fort Terramire"] = "terramire",
+  ["Gallows Hill"] = "gallows",
+  ["Gelidus"] = "gelidus",
+  ["Giant's Pet Store"] = "petstore",
+  ["Gilda And The Dragon"] = "gilda",
+  ["Gnoll's Quarry"] = "quarry",
+  ["Gold Rush"] = "goldrush",
+  ["Guardian's Spyre of Knowledge"] = "spyreknow",
+  ["Wayfarer's Caravan"] = "caravan",
+  ["Halls of the Damned"] = "damned",
+  ["Hatchling Aerie"] = "hatchling",
+  ["Hedgehogs' Paradise"] = "hedge",
+  ["Helegear Sea"] = "helegear",
+  ["Hotel Orlando"] = "orlando",
+  ["House of Cards"] = "cards",
+  ["Icefall"] = "icefall",
+  ["Imagi's Nation"] = "imagi",
+  ["Imperial Nation"] = "imperial",
+  ["Insanitaria"] = "insan",
+  ["Into the Long Night"] = "longnight",
+  ["Intrigues of Times Past"] = "times",
+  ["Island of Lost Time"] = "losttime",
+  ["Jenny's Tavern"] = "jenny",
+  ["Jotunheim"] = "jotun",
+  ["Jungles of Verume"] = "verume",
+  ["Keep of the Kobaloi"] = "kobaloi",
+  ["Kerofk"] = "kerofk",
+  ["Ketu Uplands"] = "ketu",
+  ["Kiksaadi Cove"] = "cove",
+  ["Kimr's Farm"] = "farm",
+  ["Kingdom of Ahner"] = "ahner",
+  ["Kingsholm"] = "kingsholm",
+  ["Kobold Siege Camp"] = "siege",
+  ["Kul Tiras"] = "kultiras",
+  ["Land of Legend"] = "legend",
+  ["Living Mines of Dak'Tai"] = "livingmine",
+  ["Masquerade Island"] = "masq",
+  ["Mount duNoir"] = "dunoir",
+  ["Mudwog's Swamp"] = "mudwog",
+  ["Nanjiki Ruins"] = "nanjiki",
+  ["Nebulous Horizon"] = "horizon",
+  ["Necromancers' Guild"] = "necro",
+  ["Nenukon and the Far Country"] = "nenukon",
+  ["New Thalos"] = "newthalos",
+  ["Northstar"] = "northstar",
+  ["Nottingham"] = "nottingham",
+  ["Olde Worlde Carnivale"] = "carnivale",
+  ["Onyx Bazaar"] = "bazaar",
+  ["Ookushka Garrison"] = "ooku",
+  ["Paradise Lost"] = "paradise",
+  ["Plains of Nulan'Boar"] = "nulan",
+  ["Pompeii"] = "pompeii",
+  ["Prosper's Island"] = "prosper",
+  ["Qong"] = "qong",
+  ["Radiance Woods"] = "radiance",
+  ["Raganatittu"] = "raga",
+  ["Realm of Deneria"] = "deneria",
+  ["Realm of the Firebird"] = "firebird",
+  ["Realm of the Sacred Flame"] = "firenation",
+  ["Realm of the Zodiac"] = "zodiac",
+  ["Rebellion of the Nix"] = "rebellion",
+  ["Rosewood Castle"] = "rosewood",
+  ["Sagewood Grove"] = "sagewood",
+  ["Sanctity of Eternal Damnation"] = "sanctity",
+  ["Sen'narre Lake"] = "sennarre",
+  ["Seven Wonders"] = "wonders",
+  ["Shadow's End"] = "shadowsend",
+  ["Sheila's Cat Sanctuary"] = "cats",
+  ["Sho'aram, Castle in the Sand"] = "sandcastle",
+  ["Siren's Oasis Resort"] = "sirens",
+  ["Snuckles Village"] = "snuckles",
+  ["Storm Mountain"] = "storm",
+  ["Storm Ships of Lem-Dagor"] = "lemdagor",
+  ["Sundered Vale"] = "vale",
+  ["Swordbreaker's Hoard"] = "hoard",
+  ["Tairayden Peninsula"] = "peninsula",
+  ["Tai'rha Laym"] = "laym",
+  ["Takeda's Warcamp"] = "takeda",
+  ["Tanra'vea"] = "tanra",
+  ["Thandeld's Conflict"] = "conflict",
+  ["The Abyssal Caverns of Sahuagin"] = "sahuagin",
+  ["The Amazon Nation"] = "amazon",
+  ["The Amusement Park"] = "amusement",
+  ["The Archipelago of Entropy"] = "entropy",
+  ["The Astral Travels"] = "astral",
+  ["The Aylorian Academy"] = "academy",
+  ["The Blighted Tundra of Andarin"] = "andarin",
+  ["The Blood Opal of Rauko'ra"] = "raukora",
+  ["The Blood Sanctum"] = "sanctum",
+  ["The Broken Halls of Horath"] = "horath",
+  ["The Call of Heroes"] = "callhero",
+  ["The Cataclysm"] = "cataclysm",
+  ["The Chasm and The Catacombs"] = "chasm",
+  ["The Chessboard"] = "chessboard",
+  ["The Continent of Mesolar"] = "mesolar",
+  ["The Coral Kingdom"] = "coral",
+  ["The Cougarian Queendom"] = "cougarian",
+  ["The Council of the Wyrm"] = "wyrm",
+  ["The Covenant of Mistridge"] = "mistridge",
+  ["The Cracks of Terra"] = "terra",
+  ["The Curse of the Midnight Fens"] = "fens",
+  ["The Dark Continent, Abend"] = "abend",
+  ["The Dark Temple of Zyian"] = "zyian",
+  ["The DarkLight"] = "darklight",
+  ["The Darkside of the Fractured Lands"] = "darkside",
+  ["The Deadlights"] = "deadlights",
+  ["The Desert Prison"] = "desert",
+  ["The Drageran Empire"] = "drageran",
+  ["The Dungeon of Doom"] = "dundoom",
+  ["The Earth Lords"] = "earthlords",
+  ["The Eighteenth Dynasty"] = "dynasty",
+  ["The Empire of Aiighialla"] = "empire",
+  ["The Empire of Talsa"] = "talsa",
+  ["The Fabled City of Stone"] = "stone",
+  ["The Fire Swamp"] = "fireswamp",
+  ["The First Ascent"] = "ascent",
+  ["The Flying Citadel"] = "citadel",
+  ["The Forest of Li'Dnesh"] = "lidnesh",
+  ["The Fractured Lands"] = "fractured",
+  ["The Gathering Horde"] = "gathering",
+  ["The Gauntlet"] = "gauntlet",
+  ["The Gladiator's Arena"] = "arena",
+  ["The Glamdursil"] = "glamdursil",
+  ["The Goblin Fortress"] = "fortress",
+  ["The Grand City of Aylor"] = "aylor",
+  ["The Graveyard"] = "graveyard",
+  ["The Great City of Knossos"] = "knossos",
+  ["The Great Salt Flats"] = "salt",
+  ["The Icy Caldera of Mauldoon"] = "caldera",
+  ["The Imperial City of Reme"] = "reme",
+  ["The Infestation"] = "infest",
+  ["The Keep of Kearvek"] = "kearvek",
+  ["The Killing Fields"] = "fields",
+  ["The Labyrinth"] = "labyrinth",
+  ["The Land of Oz"] = "landofoz",
+  ["The Land of the Beer Goblins"] = "beer",
+  ["The Lower Planes"] = "lplanes",
+  ["The Maelstrom"] = "maelstrom",
+  ["The Marshlands of Agroth"] = "agroth",
+  ["The Misty Shores of Yarr"] = "yarr",
+  ["The Monastery"] = "monastery",
+  ["The Mountains of Desolation"] = "desolation",
+  ["The Nine Hells"] = "ninehells",
+  ["The Nyne Woods"] = "nynewoods",
+  ["The Old Cathedral"] = "cathedral",
+  ["The Palace of Song"] = "songpalace",
+  ["The Partroxis"] = "partroxis",
+  ["The Path of the Believer"] = "believer",
+  ["The Realm of Infamy"] = "infamy",
+  ["The Realm of the Hawklords"] = "hawklord",
+  ["The Relinquished Tombs"] = "tombs",
+  ["The Reman Conspiracy"] = "remcon",
+  ["The Ruins of Diamond Reach"] = "ruins",
+  ["The Ruins of Stormhaven"] = "stormhaven",
+  ["The Sanguine Tavern"] = "sanguine",
+  ["The Scarred Lands"] = "scarred",
+  ["The School of Horror"] = "soh",
+  ["The Shadows of Minos"] = "minos",
+  ["The Silver Volcano"] = "volcano",
+  ["The Slaughter House"] = "slaughter",
+  ["The Southern Ocean"] = "southern",
+  ["The Stuff of Shadows"] = "stuff",
+  ["The Temple of Shal'indrael"] = "temple",
+  ["The Temple of Shouggoth"] = "shouggoth",
+  ["The Three Pillars of Diatz"] = "diatz",
+  ["The Titans' Keep"] = "titan",
+  ["The Tournament of Illoria"] = "illoria",
+  ["The Town of Solan"] = "solan",
+  ["The Tree of Life"] = "tol",
+  ["The Trouble with Gwillimberry"] = "gwillim",
+  ["The Uncharted Oceans"] = "uncharted",
+  ["The UnderDark"] = "underdark",
+  ["The Upper Planes"] = "uplanes",
+  ["The Uprising"] = "uprising",
+  ["The Were Wood"] = "werewood",
+  ["The Witches of Omen Tor"] = "omentor",
+  ["The Wobbly Woes of Woobleville"] = "wooble",
+  ["The Wood Elves of Nalondir"] = "woodelves",
+  ["The Yurgach Domain"] = "yurgach",
+  ["Tilule Rehabilitation Clinic"] = "tilule",
+  ["Tir na nOg"] = "tirna",
+  ["Tournament Camps"] = "camps",
+  ["Transcendece"] = "transcend",
+  ["Tribal Origins"] = "origins",
+  ["Tumari's Diner"] = "diner",
+  ["Umari's Castle"] = "umari",
+  ["Unearthly Bonds"] = "bonds",
+  ["Verdure Estate"] = "verdure",
+  ["Vidblain, the Ever Dark"] = "vidblain",
+  ["War of the Wizards"] = "wizards",
+  ["Warrior's Training Camp"] = "wtc",
+  ["Wayward Alehouse"] = "alehouse",
+  ["Weather Observatory"] = "weather",
+  ["Wedded Bliss"] = "bliss",
+  ["Wildwood"] = "wildwood",
+  ["Winds of Fate"] = "winds",
+  ["Winterlands"] = "winter",
+  ["Xyl's Mosaic"] = "xylmos",
+  ["Yggdrasil: The World Tree"] = "ygg",
+  ["Zangar's Demonic Grotto"] = "zangar",
+  ["The Keep of the Asherodan"] = "asherodan",
+  ["Bloodlust Dungeon"] = "dungeon",
+  ["Oradrin's Chosen"] = "oradrin",
+}
 
 ------ Identify results reporting ------
 function adbGetStatNumberSafe(stat)

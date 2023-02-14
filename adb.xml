@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.018"
+   version="1.019"
    >
 <description trim="y">
 <![CDATA[
@@ -23,9 +23,6 @@
 @CThis is still early version and lots of things are in my todo list, including
 @Cadding more help details and examples.
 @wBla bla bla, add more text here
-
-@RDon't shoot yourself in the leg. Format settings checks aren't there yet.@w
-@R!DISABLE THIS IN EPICS!@w
 
 @R    It's required to enable server side invmon for this plugin to work!
 @w    Execute the following command to enable it:
@@ -229,6 +226,12 @@
   It's the same as typing longer command:
   @Wasb options set cockpit enable_auto_actions [false|true]@w
 
+@Wadb shop [all]@w - adds items from shop to DB.
+  This command will identify and add items with unlimited amount sold by shopkeeper in current room to DB.
+  Item's location will be set to current zone and a special "shopkeeper" mob with current room #.
+  If @Gall@w is specified this command will also identify and add all base items sold by store to DB with unknown
+  location which will be automatically updated if you find a mob dropping this item.
+
 TODO: move changelog to separate entry
 @MChangelog@w:
   1.003
@@ -292,6 +295,8 @@ TODO: move changelog to separate entry
   Added items ignore list to exclude from db updates (random aarch, aardword etc)
   Added zones list to switch adb off automatically (welcome to EPICS!)
   Check cockpit options for more details.
+  1.019
+  Added adb shop command.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
@@ -523,6 +528,16 @@ TODO: move changelog to separate entry
   <alias
    script="adbOnAdbFind"
    match="^adb find (?<query>.+?)(?: (?<format>format\..+))?$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
+   script="adbOnAdbShop"
+   match="^adb shop(?: (?<all>all))?$"
    regexp="y"
    enabled="y"
    send_to="12"
