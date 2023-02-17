@@ -584,7 +584,6 @@ function adbCacheShrink(force_full_clear)
   for i = #keys, force_full_clear and 1 or (adb_options.cockpit.max_cache_size + 1), -1 do
     local item = adb_recent_cache[keys[i]]
     if item.cache.new then
-      assert(not item.cache.rowid)
       adbDbAddItem(item)
     elseif item.cache.dirty then
       adbDbUpdateItem(item)
@@ -758,6 +757,10 @@ function adbCacheAdd(item, skip_cache_search)
     end
     if not adb_recent_cache[key] then
       adb_recent_cache.meta.count = adb_recent_cache.meta.count + 1
+    else
+      adbErr("adbCacheGetItem failed but there's an item with key [" .. key .. "] in cache...")
+      item.cache.new = adb_recent_cache[key].cache.new
+      item.cache.dirty = true
     end
     adb_recent_cache[key] = item
     adbDebug("Added to cache:", 3)
@@ -1011,6 +1014,12 @@ function adbMergeMobRooms(mob1, mob2)
 end
 
 function adbItemLocationAddMob(item, mob)
+  -- Only add mob if the mob's zone matches item foundAt
+  if adbAreaNameXref[item.stats.foundat] ~= mob.zone then
+    AnsiNote(ColoursToANSI("@CIgnoring @w" .. mob.colorName .. "@w in zone " .. mob.zone .. " for item @w[" .. item.colorName .. "@w]"))
+    return
+  end
+
   local key = mob.zone .. "->" .. mob.colorName
   local existing_mob = item.location.mobs[key]
   if existing_mob ~= nil then
@@ -1044,6 +1053,13 @@ function adbDrainIdResultsReadyCB(item, ctx)
   -- for now going to have location.zone which is set to first mob's zone
   if not adbIsItemIgnored(ctx.drain_loot_item.name, ctx.drain_loot_item.zone, adb_state.ignore_db_updates_for_items) then
     if ctx.cache_item == nil then
+      -- It could be that we looted item from another zone which was given to or picked up by mob in different place
+      local item_zone = ctx.drain_loot_item.zone
+      if adbAreaNameXref[item.stats.foundat] ~= nil then
+        item_zone = adbAreaNameXref[item.stats.foundat]
+      else
+        adbErr("Don't know short zone name for " .. item.stats.foundat)
+      end
       item.location = {
         zone = ctx.drain_loot_item.zone,
         mobs = {},
@@ -1225,7 +1241,7 @@ function adbOnItemLootedTrigger(trigger_name, line, wildcards, styles)
   }
 
   for i = 1, wildcards.count ~= "" and tonumber(wildcards.count) or 1, 1 do
-    adbLootedStackPush(copytable.deep(t))
+    adbLootedStackPush(t)
   end
 
   -- one shotted mob without getting gmcp in combat state
@@ -2562,6 +2578,14 @@ end
 function adbDbAddItem(item)
   adbDebug("adbDbAddItem [" .. item.colorName .. "] [".. item.location.zone .. "] [" .. item.stats.foundat .. "]", 2)
 
+  -- It's possible that some items from different zones were given to mobs in another zone and we incorrectly
+  -- assigned item's zone field. Search for such items in db and erase.
+  local dbitem = adbDbGetItemByNameAndFoundAt(item.colorName, item.stats.foundat)
+  if dbitem ~= nil then
+    adbDebug("Erasing erroneous item from DB " .. dbitem.cache.rowid, 0)
+    adbDbCheckExecute("DELETE FROM items WHERE dbid = " .. dbitem.cache.rowid .. ";")
+  end
+
   local sql = [[
     BEGIN TRANSACTION;
     INSERT INTO items (identifyVersion, zone, colorName
@@ -2665,16 +2689,14 @@ function adbDbUpdateItem(item)
   -- maybe one day it would be worth to try doing real update,
   -- but it's complicated with potentially removed mobs etc.
   adbDebug("adbDbUpdateItem [" .. item.cache.rowid .. "] [".. item.colorName .. "] [".. item.location.zone .. "] [" .. item.stats.foundat .. "]", 2)
+
   adbDbCheckExecute("DELETE FROM items WHERE dbid = " .. item.cache.rowid .. ";")
 
-  -- Sanity check in case cache was screwed up during development
-  if adb_debug_level >= 2 then
-    local dbitem = adbDbGetItem(item.colorName, item.location.zone)
-    if dbitem ~= nil then
-      adbDebug("Item still exists in DB " .. dbitem.cache.rowid)
-      adbDbCheckExecute("DELETE FROM items WHERE dbid = " .. dbitem.cache.rowid .. ";")
-    end
-  end
+  -- for row in adbDbNrowsExec("SELECT changes() AS mod;") do
+  --   if row.mod ~= 1 then
+  --     adbErr("Something is off, updating item [" .. item.colorName .. "] failed to delete existing item from db " .. tostring(item.cache.rowid))
+  --   end
+  -- end
 
   adbDbAddItem(item)
 end
@@ -2692,6 +2714,7 @@ function adbDbSyncCache()
         update_count = update_count + 1
         adbDbUpdateItem(v)
       end
+      assert(not (v.cache.new or v.cache.dirty))
     end
   end
   adbInfo("Sync finished. Added " .. add_count .. " and updated " .. update_count .. " items.")

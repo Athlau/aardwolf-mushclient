@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.019"
+   version="1.020"
    >
 <description trim="y">
 <![CDATA[
@@ -297,6 +297,8 @@ TODO: move changelog to separate entry
   Check cockpit options for more details.
   1.019
   Added adb shop command.
+  1.020
+  Fixed a bug for items looted from mobs not in item's FountAt zone.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>
