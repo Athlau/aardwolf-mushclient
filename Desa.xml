@@ -27,7 +27,7 @@
    enabled="y"
    group="desolation"
    keep_evaluating="y"
-   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury|bone-crunching force|neural overload) .*$"
+   match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury|bone-crunching force|neural overload|projected force|traumatic sending) .*$"
    regexp="y"
    sequence="150"
    script="Desa_process_damage"
@@ -38,7 +38,7 @@
   <trigger
    enabled="y"
    group="desolation"
-   match="^You don't have enough mana to cast '(?<spell>desolation|psychosis|spasm|neural overload)'\.$"
+   match="^You don't have enough mana to cast '(?<spell>desolation|psychosis|spasm|neural overload|projected force|traumatic sending)'\.$"
    regexp="y"
    send_to="12"
    sequence="100"
@@ -68,7 +68,7 @@
   <trigger
    enabled="y"
    group="desolation"
-   match="^Cast (?<spell>desolation|psychosis|spasm|neural overload) on whom\?$"
+   match="^Cast (?<spell>desolation|psychosis|spasm|neural overload|project force|trauma) on whom\?$"
    regexp="y"
    send_to="12"
    sequence="100"
@@ -144,6 +144,26 @@
   </alias>
 
   <alias
+   match="^pf( .*)?$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>Desa_cast("%1", "project force")</send>
+
+  </alias>
+  <alias
+   match="^tr( .*)?$"
+   enabled="y"
+   regexp="y"
+   send_to="12"
+   sequence="100"
+  >
+  <send>Desa_cast("%1", "trauma")</send>
+  </alias>
+
+  <alias
    match="^desc$"
    enabled="y"
    regexp="y"
@@ -166,6 +186,8 @@ damage_to_command = {
   ["blast of fury"] = "ps",
   ["bone-crunching force"] = "spasm",
   ["neural overload"] = "no",
+  ["projected force"] = "pf",
+  ["traumatic sending"] = "tr",
 }
 
 function Desa_cast(target, spell)
