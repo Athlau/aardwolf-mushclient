@@ -299,6 +299,8 @@ TODO: move changelog to separate entry
   Added adb shop command.
   1.020
   Fixed a bug for items looted from mobs not in item's FountAt zone.
+  1.021
+  Update shop location for already known items if needed.
  @R---------------------------------------------------------------------------------
 ]]>
 </description>

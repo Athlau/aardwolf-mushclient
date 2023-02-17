@@ -1022,10 +1022,18 @@ function adbItemLocationAddMob(item, mob)
 
   local key = mob.zone .. "->" .. mob.colorName
   local existing_mob = item.location.mobs[key]
+  local modified = existing_mob == nil
+
   if existing_mob ~= nil then
-    existing_mob.rooms = adbMergeMobRooms(existing_mob, mob)
+    local new_rooms = adbMergeMobRooms(existing_mob, mob)
+    modified = new_rooms ~= existing_mob.rooms
+    existing_mob.rooms = new_rooms
   else
     item.location.mobs[key] = mob
+  end
+
+  if modified and item.cache then
+    item.cache.dirty = true
   end
 end
 
@@ -1606,9 +1614,13 @@ function adbOnAdbShopListReady(style_lines)
 
         if cache_item ~= nil then
           -- TODO check if need to update identify version, full/partial id etc.
-          if adb_options.cockpit.show_db_cache_hits then
-            AnsiNote(ColoursToANSI("@CADB item already in cache: @w[" .. color_name .. "@w]"))
-          end
+          local mob = {
+            name = "shopkeeper",
+            colorName = "@Yshopkeeper",
+            rooms = adb_shop_ctx.room,
+            zone = adb_shop_ctx.zone,
+          }
+          adbCacheItemAddMobs(cache_item, {mob})
         else
           local t = {
             number = number,
@@ -1658,16 +1670,16 @@ function adbShopIdreadyCB(obj, ctx)
       zone = ctx.zone,
       mobs = {},
     }
-    mob = {
+    local mob = {
       name = "shopkeeper",
       colorName = "@Yshopkeeper",
       rooms = tostring(ctx.room),
       zone = ctx.zone,
     }
-    table.insert(obj.location.mobs, mob)
+    adbItemLocationAddMob(obj, mob)
     adbCacheAdd(obj)
   else
-    cache_item = adbCacheGetItemByNameAndFoundAt(obj.colorName, obj.stats.foundat)
+    local cache_item = adbCacheGetItemByNameAndFoundAt(obj.colorName, obj.stats.foundat)
     if cache_item == nil then
       if adbAreaNameXref[obj.stats.foundat] ~= nil then
         obj.location = {
