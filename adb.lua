@@ -82,6 +82,10 @@ scarred:a miner's pick
 scarred:head of a dragonsnake
 knossos:a jeweled bracelet
 deathtrap:::\[=== Sword of War ===-
+dsr:a leather helmet
+dsr:a steel shield
+drageran:leg of venison
+drageran:a wicked looking riding crop
 ]],
       auto_adb_off_for_zones =
 [[icefall
@@ -2100,11 +2104,24 @@ function adbEnchantsPresent(enchants)
   return false
 end
 
+function adbCanEnchant(item, enchant)
+  if enchant == "Solidify" then
+    return item.stats.flags:find("invis") and not item.stats.flags:find("solidified")
+  elseif enchant == "Illuminate" then
+    return not item.stats.flags:find("glow") and not item.stats.flags:find("illuminated")
+  elseif enchant == "Resonate" then
+    return not item.stats.flags:find("hum") and not item.stats.flags:find("resonated")
+  end
+  return false
+end
+
 function adbGetEnchantsShortString(item)
   local res = ""
   for k, v in ipairs(adb_enchants.order) do
     if item.enchants[v] ~= nil then
-      res = res .. adb_enchants[v]
+      res = res .. adb_options.colors.enchants .. adb_enchants[v]
+    elseif adbCanEnchant(item, v) then
+      res = res .. adb_options.colors.default .. adb_enchants[v]
     end
   end
   return res
