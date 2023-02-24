@@ -744,6 +744,11 @@ function adbCacheItemAddMobs(cache_item, mobs)
 end
 
 function adbCacheAdd(item, skip_cache_search)
+  if (item.stats.foundat == nil) then
+    AnsiNote(ColoursToANSI("@CADB no identify wish, skipping " .. item.colorName))
+    return
+  end
+
   local key = adbCacheGetKey(item.colorName, item.location.zone)
   local cache_item = nil
   if not skip_cache_search then
@@ -1019,7 +1024,7 @@ end
 
 function adbItemLocationAddMob(item, mob)
   -- Only add mob if the mob's zone matches item foundAt
-  if adbAreaNameXref[item.stats.foundat] ~= mob.zone then
+  if item.stats.foundat ~= nil and adbAreaNameXref[item.stats.foundat] ~= mob.zone then
     AnsiNote(ColoursToANSI("@CIgnoring @w" .. mob.colorName .. "@w in zone " .. mob.zone .. " for item @w[" .. item.colorName .. "@w]"))
     return
   end
@@ -1341,7 +1346,7 @@ function adbProcessIdResults(obj, ctx)
   if format.location or format.bloot_diffs then
     local bloot = adbGetBlootLevel(obj.stats.name)
     local base_name = adbGetBaseColorName(obj.colorName)
-    local base_item = adbCacheGetItemByNameAndFoundAt(base_name, obj.stats.foundat)
+    local base_item = obj.stats.foundat ~= nil and adbCacheGetItemByNameAndFoundAt(base_name, obj.stats.foundat) or nil
     if base_item ~= nil then
       if format.bloot_diffs and bloot > 0 then
         local diff = adbDiffItems(base_item, obj, true)
@@ -3059,12 +3064,344 @@ function OnPluginBroadcast(msg, id, name, text)
   end
 end
 
-function adbOnHelp()
-  AnsiNote(ColoursToANSI(world.GetPluginInfo(world.GetPluginID(), 3)))
+local adb_help = {
+  ["commands"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Waid@w           - identify an item, see @Gadb help aid@w for more info.
+@Wadb options@w   - various adb options, see @Gadb help options@w for more details.
+@Wadb format@w    - display format settings, see @Gadb help format@w for more details.
+@Wadb info@w      - show adb plugin information.
+@Wadb find@w      - search the item database, see @Gadb help find@w for more details.
+@Waide@w          - command to search/manage items based on their enchants,
+                see @Gadb help aide@w for more details.
+
+@Wadb [on|off]@w  - disable or enable auto actions.
+                It's the same as typing longer command:
+                @Wadb options set cockpit enable_auto_actions [false|true]@w
+
+@Wadb shop@w      - add shop's inventory to database, see @Gadb help shop@w for more details.
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["aid"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Waid <item> [worn] [channel] [format.name]@w
+ This command will identify given <item> and report output locally or to a
+ specified channel.
+ Examples:
+ @Waid 2685807183@w  - will identify item and output results locally using
+                   format specified in @Gidentify_format@w
+ @Waid something format.full@w  - will identify item and output results locally
+                              using format.full settings
+ @Waid sword gtell@w - will identify item and output result to group channel
+                   using format specified in identify_channel_format
+ @Waid sword worn t Sletch spam incoming: format.full@w - spam Sletch with full details :P
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["options"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Wadb options [edit|reset|set <group> <option> [value] ]@w
+ This command shows or changes ADB options.
+ Examples:
+ @Wadb options@w - show current options
+ @Wadb options edit@w - edit options
+ @Wadb options reset@w - reset options to defaults.
+ @Wadb options set format.full flags false@w - don't show flags in format.full
+ @Wadb options set cockpit show_db_updates false@w - don't show DB update messages
+ @Wadb options set auto_actions on_normal_looted_cmd put %item bag@w -
+   Executes "put %item bag" command for all non-bloot items looted from corpses.
+   @W%item@w will be replaced with looted item id.
+         Default options are explicitly conflicting, lua script will drop low cost
+         items and then "_cmd" will try to put this dropped item in *my* bag.
+         You can either modify the lua part to drop item in "else" clause or just
+         clear it if you don't care.
+ @Wadb options set auto_actions on_normal_looted_cmd@w - clear this action
+
+@Ccockpit@W options@w
+ Those could be set via @Wadb options edit@w or @Wadb options set cockpit <options> <value>@w:
+
+ @Wenable_auto_actions <true|false>@w - enables or disables auto actions.
+   Those actions from @Cauto_actions@w group are executed when you loot an item.
+   @mon_normal_looted_lua@w - lua script, executed when you loot normal - not bloot item.
+   @mon_normal_looted_cmd@w - regular command, it's sent to "Execute" so you can use
+                          aliases here.
+
+   For "normal" looted items you can use all of the item fields prefixed with % symbol
+   to get actual values for the given item. Those pretty much are the same as listed
+   in @G"dinv help query"@w. With an exception of @Gid@w field which is replaced by @G%item@w.
+   TODO: list fields
+   There are few special fields available:
+   @G%item@w - looted item ID.
+   @G%bloot@w - bloot level of the item, 0 for "normal" loot.
+   @G%gpp@w - item's gold per pound value, worth/weight (checked for division by 0).
+   @G%colorName@w - item's color name
+
+   @mon_bloot_looted_lua@w and @mon_bloot_looted_cmd@w are the same as normal actions,
+   but are only executed for bonus loot items. In other words %bloot is bigger than 0.
+   @RNote@R: bonus loot items aren't automatically identified. Instead you will get
+   most field values from it's "base" counterpart if that's found in the DB. Except for
+   %item, %name, %colorName and %bloot which correspond to the actually looted item.
+   Note: @RBloot actions with not be executed if base items isn't found in DB.@w
+
+   I'm trying to decide if this usable or should there be an options to actually
+   identify bloot items as well.
+
+ @Wshow_bloot_level <true|false>@w - show/hide bloot level next to bloot names in game.
+   If enabled changes your game output to look like this:
+     @R(K)@B(M)@W(G)@C(H) @G(@WShimmering 8@G)@w @yM@Yon@ykey @wB@Wo@wne @W(@G154@W)
+     @R(K)@B(M)@W(G)@C(H) @G(@WPolished 1@G)@w @RBi@Gol@Bum@Yin@Ces@Mce@Wnc@Re!@w @W(@G150@W)
+     @R(K)@B(M)@W(G)@C(H) @R(@WRadiant <11>@R)@w a pair of icy boots @W(@G198@W)
+     @R(K)@B(M)@W(G)@C(H) @G(@WEnhanced 2@G)@w @YE@ylvish @YR@yobes @Yo@yf @YP@yriesthood@w @W(@G153@W)@w
+
+ @Widentify_command@w - command to use for item identification. Default's to "id",
+   @rNot implemented@w
+
+ @Wupdate_db_on_loot <true|false>@w   - update DB with looted items.
+
+ @Wshow_db_updates <true|false>@w     - show/hide information when new items are adeed to DB.
+
+ @Wshow_db_cache_hits <true|false>@w  - show/hide DB cache hit messages.
+
+ @Wcache_added_format <format.name>@w - item ID output format used to display new items.
+
+ @Widentify_format@w - default "aid" output format when channel is not specifief.
+
+ @Widentify_channel_format@w - default "aid" output format when sending to a channel.
+   TODO: more details on format, add format add/remove commands.
+   For now you can check options under "format.brief" and "format.full"
+
+ @Wdb_find_format <format.name>@w - default "adb find" output format.
+
+ @Wauto_adb_off_for_zones@w - a list of zones where ADB will not execute any of auto_actions for
+ looted items.
+ Defaults to list of EPICs. Use @Wadb options edit@w to edit.
+
+ @Wignore_aucto_actions_for_items@w - a list of item names (with optional zone name) to skipped
+ when executing auto actions. Defaults to some "special" items needed for goals, getting keys as
+ well as various @R(@YAarchaeology@R)@w, @RAardWords@w etc.
+ See note below for more details. Use @Wadb options edit@w to edit.
+
+ @Wignore_db_updates_for_items@w - a list of item names (with optional zone name) to skip from
+ automatically adding/updating the DB. Defaults to various @R(@YAarchaeology@R)@w, @RAardWords@w, etc.
+ Because those are random drop and it doesn't make much sense storing information where it was looted
+ from. See note below for more details. Use @Wadb options edit@w to edit.
+
+ @WNote:@w Lines for items ignore list should be formed like this:
+ @G[<zone name>:]<item name regex>@w
+ If @G[<zone name>:]@w is not present, setting will apply to all zones.
+ See default options for some examples.
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["format"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Wadb format add format.<newname> [<existing name>]@w - adds new output format with specified <new name>
+  and copies settings from existing format. After adding a format you can change it's settings
+  via @Wadb options set <format.newname> <setting> <value>@w
+  or @Wadb format edit@w command.
+  For example: adb format add format.mine
+
+@Wadb format remove [<existing name>]@w - remove existing output format
+  For example: adb format remove
+               adn format remove format.mine
+
+@Wadb format edit [<existing name>]@w - edit existing format
+  For example: adb format edit
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["find"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Wadb find <query> [format.name]@w - search db using provided <query>.
+  The query should be formed following sqlite3 select rules.
+  Some examples:
+     adb find type='Weapon' and level>25 and level<30 ORDER BY avedam desc, level asc
+     adb find dam+hit>=50 format.full
+
+  Note: field values are case sensitive. If you don't care you could do something like:
+    @Wadb find LOWER(name) like '%sword%'@w - which will match all items with names containing
+    sword, SWORD, SwOrD etc.
+
+  To get list of fields available use "dinv help query" for now. It's almost the same.
+  TODO: list fields available and give more details here.
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["aide"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Waide [container_id] [enchanted] [removable] [S<num>] [I<num>] [R<num>] [IR<num>] [format.name] [command.<command>]@w - Enchanters aid.
+This command will identify all matching items in the container or inventory if @Gcontainer_id@w is not specified and 
+run a given @G<command>@w if it's specified.
+
+@Genchanted@w - only show items which have one or more enchants present
+@Gremovable@w - only show items which have one or more removable (by enchanter) enchants
+
+@GS<num>@w - show items with Solidify giving <= @G<num>@w HR/DR.
+@GI<num>@w - show items with Illuminate giving <= @G<num>@w Stats.
+@GR<num>@w - show items with Resonate giving <= @G<num>@w Stats.
+@GIR<num>@w - show items with Resonate + Solidify giving <= @G<num>@w Stats.
+  If more 2 or more of the SIR parameters are present then items matching at least one of the given checks will be shown.
+  If @Gremovable@w options is given, then only items with removable SIR enchants passing the comparision will be shown.
+
+@Gformat.name@w - format to use with Identify output, defaults to @Wcockpit.aide_format@w option.
+@Gcommand.<command>@w - execute given command after showing item info. Item ID will be appended to given command.
+
+Examples:
+  @Waide@w - identify all items in inventory
+
+  @Waide 2785187925 enchanted@w - show all @Genchanted@w items in container 2785187925:
+
+    @D[@W2668599686@D] @G(@WDazzling <9>@G)@w @x117a @x153ghostly @x117helmet @D[@C201@D lvl] [@Whead@D]
+      [@G36@Ddr @G12@Dhr] [@Y27@Dstats] [@G2@Dstr @G5@Dint @G5@Dwis @G4@Ddex @G11@Dluk] [@CSIR@D]
+    @x051 Solidify @x244[@x046+6@x244dr] [@x046remove Solidify@x244]@x051 Illuminate @x244[@x046+4@x244wis] [@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+3@x244luk] [@x046remove Resonate@x244]
+
+    @D[@W2685807183@D] @RAura @Yof @GTrivia @D[@C1@D lvl] [@Wabove@D] [@G9@Ddr @G7@Dhr] [@Y21@Dstats] [@G3@Dstr @G1@Dint @G7@Dwis @G3@Ddex @G2@Dcon @G5@Dluk] [@CSIR@D]
+    @x051 Solidify @x244[@x046+2@x244dr] [@x196TP only@x244]@x051 Illuminate @x244[@x046+4@x244wis] [@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+3@x244luk] [@x046remove Resonate@x244]
+
+  @Waide 2785187925 removable S2@w - show items in container 2785187925 which either have removeable
+                                Illuminate/Resonate enchants or removable Solidify with HR/DR<=2
+  Will output same as above.
+
+  @Waide 2695030721 enchanted S3 I0 R0@w - show items in container 2695030721 which have solidify enchant giving <= 3 HR/DR:
+
+    @D[@W2706637349@D] @G(@WVibrant 5@G)@w @y-@W)@w=@y=@w=@Wdull lance@w=@y=@w==--- @D[@C92@D lvl] [@Wwield@D]
+      [@M232@Davg @Wpolearm Pierce @D] [@G11@Ddr @G6@Dhr] [@Y7@Dstats] [@G1@Dint @G6@Dluk] [@CSR@D]
+    @x051 Solidify @x244[@x046+1@x244dr] [@x046remove Solidify@x244]@x051 Resonate @x244[@x046+2@x244luk] [@x046remove Resonate@x244]
+
+    @D[@W2756839229@D] @G(@WEnhanced 2@G)@w @C. @W+ @Rbloody liver greaves @W+ @C. @D[@C200@D lvl] [@Wlegs@D]
+      [@G24@Ddr @G5@Dhr] [@Y29@Dstats] [@G7@Dstr @G5@Dint @G3@Dwis @G7@Ddex @G6@Dcon @G1@Dluk]@D [@CSIR@D]
+    @x051 Solidify @x244[@x046+3@x244hr] [@x196TP only@x244]@x051 Illuminate @x244[@x046+3@x244wis][@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+1@x244luk] [@x196TP only@x244]
+
+    @D[@W2757910324@D] @G(@WPolished 1@G)@w @x086a shapeshifting shield @D[@C200@D lvl] [@Wshield@D]
+      [@G26@Ddr @G11@Dhr] [@Y24@Dstats] [@G4@Dstr @G2@Dint @G8@Dwis @G5@Ddex @G1@Dcon @G4@Dluk]@D [@CSIR@D]
+    @x051 Solidify @x244[@x046+1@x244hr] [@x196TP only@x244]@x051 Illuminate @x244[@x046+4@x244wis] [@x046remove Illuminate@x244]@x051 Resonate @x244[@x046+3@x244luk] [@x196TP only@x244]
+
+  @Waide removable S3 I2 R2@w - show items in inventory which have a @Mremovable@w Solidify<=3 or Illuminate<=2 or Resonate<=2:
+
+    @D[@W2682741121@D] @G(>@WTouchstone@G<) @CRock Collecting Bag @D[@C200@D lvl] [@Whold@D]
+      [@G20@Ddr @G21@Dhr] [@Y12@Dstats] [@G10@Dstr @G1@Dwis @G1@Dluk] [@CSI@D]
+    @x051 Solidify @x244[@x046+1@x244hr] [@x046remove Solidify@x244]@x051 Illuminate @x244[@x046+1@x244wis @x046+1@x244luk] [@x046remove Illuminate@x244]
+
+  @wI find this handy to use after batch enchanting items in a container. So I can find items with "bad" enchants
+  like 1-2-3 HR/DR, 1-2 stat IR, to disenchant and attempt to land a better enchant.
+  @WNote:@w If disechant_hyperlinks is set in the @Gformat@w used, then you'll see a clickable Hyperlink to remove any
+  of removable enchants for the particular item. Hyperlink command will take item out of container and put it back after
+  disenchanting if necessary.
+
+  @Waide S5 I0 R0 command.drop@w - drop all items from inventory which have Solidify enchant giving less than 6 HR/DR.
+  @WNote@w Make sure to dry run query without command... to see what items gonna be affected
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["shop"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Wadb shop [all]@w - adds items from shop to DB.
+This command will identify and add items with unlimited amount sold by shopkeeper in current room to DB.
+Item's location will be set to current zone and a special "shopkeeper" mob with current room #.
+If @Gall@w is specified this command will also identify and add all base items sold by store to DB with unknown
+location which will be automatically updated if you find a mob dropping this item.
+@R-----------------------------------------------------------------------------------------------
+  ]],
+  ["changelog"] = [[
+@R-----------------------------------------------------------------------------------------------
+@MChangelog@w:
+1.003
+Added @Wadb format add/remove/edit
+Added @Wadb options edit
+1.004
+Don't update db when looting your own corpse.
+Fix 0 weight items check.
+Fix loot trigger for corpses without adjectives.
+1.005
+Fix for loot from from double adjective corpses.
+Process items if mob was one-shotted.
+1.006
+Added sqlite db under cache (check cockpit.max_cache_size option)
+Fix for loot lines not starting with color codes.
+1.007
+Fix for clan items which don't have clan instead of foundat field.
+Added extra debug command
+Added colorName field to action commands
+Fix db update on cache sync
+1.008
+Bunch of internal debugging changes.
+Added support to track loot from 'torso'.
+1.009
+Added items Skill Mods support.
+Bumped DB version to 2
+Added format options to output DB id, in-game item ID, Skill Mods, Comments, Keywords
+Added format.db and default db_find_format options.
+Added adb info command
+1.010
+Added adb find command
+Fix for reading Skill Mods from DB.
+Set default debug level to 0.
+1.011
+Change bloot actions to use name and colorName of the actually looted item.
+Minor fix to identify version updates which was forgotten sometimes.
+String are passed to lua auto actions without surrounding quotes now.
+1.012
+One more pattern for loot from the chrisp, charred corpse :D
+1.013
+Add note about invmon to related error message.
+Fix for items with really loooooong names taking more than one line.
+Fix reading of items with negative skillmods from db.
+1.014
+Added aide - aid for Enchanters.
+New format options to show item type, spells, disenchant hyperlinks.
+Switched to use wrapped_captures: no more extra prompts, empty lines etc.
+1.015
+Added lvl difference to blood diff display.
+Fix "aid" error for items which are not in bags.
+1.016
+Fix error when looting crumbling items while one-shotting mobs
+aide - show hyperlinks in grey for "good" removable enchants
+aide - add option to run custom command on matched items
+aide - not specifying one of S I R options now ignores value of relevant enchant
+aide - added IR option
+1.017
+aide - get item from bag if needed before executing command
+1.018
+Added items ignore list to exclude from auto actions (special items needed to get keys etc)
+Added items ignore list to exclude from db updates (random aarch, aardword etc)
+Added zones list to switch adb off automatically (welcome to EPICS!)
+Check cockpit options for more details.
+1.019
+Added adb shop command.
+1.020
+Fixed a bug for items looted from mobs not in item's FountAt zone.
+1.021
+Update shop location for already known items if needed.
+1.022
+Display missing enchants as grey SIR
+1.023
+Fix aid error for characters without identify wish.
+Split help into multiple topics.
+@R-----------------------------------------------------------------------------------------------
+  ]],
+}
+
+function adbOnHelp(name, line, wildcards)
+  if wildcards == nil or not adb_help[wildcards.topic] then
+    local message = [[
+
+@R    It's required to enable server side invmon for this plugin to work!
+@w    Execute the following command to enable it:
+      @Winvmon
+      @wYou will now see inventory update tags.
+
+@Gadb help@w -> show this list
+
+@WAvailable help topics:@w]]
+    adbInfo("Running ADB version: " .. tostring(GetPluginInfo(world.GetPluginID(), 19)))
+    AnsiNote(ColoursToANSI(message))
+    for k, _ in pairs(adb_help) do
+      AnsiNote(ColoursToANSI("@Gadb help " .. k .. "@w"))
+    end
+    AnsiNote("")
+  else
+    AnsiNote(ColoursToANSI(adb_help[wildcards.topic]))
+  end
 end
 
 function OnPluginInstall()
-  adbOnHelp()
+  adbInfo("Running ADB version: " .. tostring(GetPluginInfo(world.GetPluginID(), 19)))
+  AnsiNote(ColoursToANSI(world.GetPluginInfo(world.GetPluginID(), 3)))
   OnPluginEnable()
 end
 
