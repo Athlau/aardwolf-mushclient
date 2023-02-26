@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.024"
+   version="1.025"
    >
 <description trim="y">
 <![CDATA[
@@ -33,9 +33,8 @@
 
 @w Type @Gadb help@w for more information.
 
-1.024
-Added clan zones to lookup table.
-Added shop field to db.
+1.025
+Fixed another error for characters without identify wish and added message to disable db updates.
 ]]>
 </description>
 

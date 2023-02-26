@@ -1073,21 +1073,26 @@ function adbDrainIdResultsReadyCB(item, ctx)
 
   -- TODO: not sure if "same" items could be carried by mobs in different zones
   -- for now going to have location.zone which is set to first mob's zone
-  if not adbIsItemIgnored(ctx.drain_loot_item.name, ctx.drain_loot_item.zone, adb_state.ignore_db_updates_for_items) then
+  if adb_options.cockpit.update_db_on_loot and
+     not adbIsItemIgnored(ctx.drain_loot_item.name, ctx.drain_loot_item.zone, adb_state.ignore_db_updates_for_items) then
     if ctx.cache_item == nil then
       -- It could be that we looted item from another zone which was given to or picked up by mob in different place
       local item_zone = ctx.drain_loot_item.zone
-      if adbAreaNameXref[item.stats.foundat] ~= nil then
-        item_zone = adbAreaNameXref[item.stats.foundat]
+      if item.stats.foundat ~= nil then
+        if adbAreaNameXref[item.stats.foundat] ~= nil then
+          item_zone = adbAreaNameXref[item.stats.foundat]
+        else
+          adbErr("Don't know short zone name for " .. item.stats.foundat)
+        end
+        item.location = {
+          zone = item_zone,
+          mobs = {},
+        }
+        adbItemLocationAddMob(item, adbCreateMobFromLootItem(ctx.drain_loot_item))
+        adbCacheAdd(item)
       else
-        adbErr("Don't know short zone name for " .. item.stats.foundat)
+        adbInfo("It seems you don't have the identify wish... You better just disable update_db_on_loot")
       end
-      item.location = {
-        zone = ctx.drain_loot_item.zone,
-        mobs = {},
-      }
-      adbItemLocationAddMob(item, adbCreateMobFromLootItem(ctx.drain_loot_item))
-      adbCacheAdd(item)
     else
       -- if identify had to queue this call, cache_item was copied and no longer
       -- references actual table in recent cache.
@@ -3085,7 +3090,7 @@ end
 
 function adbErr(message)
   ColourNote("white", "red", "ADB ERROR: " .. message)
-  ColourNote("white", "red", "Please don't report this to Athlau with a couple pages of screen output before this message ... unless I asked you")
+  ColourNote("white", "red", "Please report this to Athlau with a couple pages of screen output before this message.")
 end
 
 function adbInfo(message)
@@ -3432,6 +3437,8 @@ Split help into multiple topics.
 1.024
 Added clan zones to lookup table.
 Added shop field to db.
+1.025
+Fixed another error for characters without identify wish and added message to disable db updates.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
