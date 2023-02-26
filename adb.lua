@@ -1041,6 +1041,11 @@ function adbItemLocationAddMob(item, mob)
     item.location.mobs[key] = mob
   end
 
+  if mob.colorName == "@Yshopkeeper" then
+    modified = modified or not item.location.shop
+    item.location["shop"] = 1
+  end
+
   if modified and item.cache then
     item.cache.dirty = true
   end
@@ -1966,6 +1971,25 @@ adbAreaNameXref = {
   ["The Keep of the Asherodan"] = "asherodan",
   ["Bloodlust Dungeon"] = "dungeon",
   ["Oradrin's Chosen"] = "oradrin",
+  --["Midgaard"] = "",
+  ["From The Midgaardian Publishing Group"] = "gaardian",
+  ["From The Seekers"] = "seekers",
+  ["From Boot Camp"] = "bootcamp",
+  ["From Crusaders of the Nameless One"] = "crusaders",
+  ["From The Creation of Tao"] = "tao",
+  ["From The Order of Light"] = "light",
+  ["From The Fellowship of the Twin Lobes"] = "twinlobe",
+  ["From The Watchmen of Aardwolf"] = "watchmen",
+  ["From The Emerald Knights"] = "emerald",
+  ["From Order of the Bard"] = "bard",
+  ["From Crusaders of the Nameless One"] = "crusaders",
+  ["From The Great Circle of Druids"] = "druid",
+  ["From The Tribes of the Amazon"] = "amazonclan",
+  ["From The Soul Pyre"] = "pyre",
+  ["From Masaki Clan"] = "masaki",
+  ["From Knights of Perdition"] = "perdition",
+  ["From Loqui"] = "loqui",
+  ["From House of Touchstone"] = "touchstone",
 }
 
 ------ Identify results reporting ------
@@ -2418,7 +2442,7 @@ end
 
 ------ DB ------
 adb_db_filename = "adb.db"
-adb_db_version = 2
+adb_db_version = 3
 adb_db = nil
 
 local adb_db_special_fields = {
@@ -2429,6 +2453,7 @@ local adb_db_special_fields = {
   identifyLevel = true,
   identifyVersion = true,
   skillMods = true,
+  shop = true,
 }
 function adbDbMakeItemFromRow(row)
   adbDebug("adbDbMakeItemFromRow " .. row.dbid, 2)
@@ -2445,6 +2470,7 @@ function adbDbMakeItemFromRow(row)
     location = {
       zone = row.zone,
       mobs = {},
+      shop = row.shop,
     },
     enchants = {},
     skillMods = {},
@@ -2630,6 +2656,9 @@ function adbDbAddItem(item)
   if item.identifyLevel then
     sql = sql .. ", identifyLevel"
   end
+  if item.location.shop then
+    sql = sql .. ", shop"
+  end
 
   for k, v in pairs(item.stats) do
     if type(v) ~= "table" then
@@ -2666,6 +2695,9 @@ function adbDbAddItem(item)
   end
   if item.identifyLevel then
     sql = sql .. ", " .. adbSqlTextValue(item.identifyLevel)
+  end
+  if item.location.shop then
+    sql = sql .. ", " .. tostring(item.location.shop)
   end
 
   for k, v in pairs(item.stats) do
@@ -2893,6 +2925,31 @@ function adbDbUpdateVersion(version)
     ]]
     adbDbCheckExecute(sql)
     version = 2
+    adbInfo("Updated DB to version " .. version)
+  end
+
+  if version == 2 then
+    local sql = [[
+      PRAGMA foreign_keys = ON;
+      BEGIN TRANSACTION;
+
+      ALTER TABLE items ADD shop     INTEGER;
+
+      UPDATE items
+        SET shop = 1
+      WHERE EXISTS (
+        SELECT items1.dbid FROM items items1
+        LEFT JOIN item_mobs on items1.dbid = item_mobs.item_dbid
+        LEFT JOIN mobs on mobs.dbid = item_mobs.mob_dbid
+        WHERE mobs.colorName == '@Yshopkeeper' and items.dbid = items1.dbid
+      );
+
+      COMMIT;
+
+      PRAGMA user_version = 3;
+    ]]
+    adbDbCheckExecute(sql)
+    version = 3
     adbInfo("Updated DB to version " .. version)
   end
 
@@ -3372,6 +3429,9 @@ Display missing enchants as grey SIR
 1.023
 Fix aid error for characters without identify wish.
 Split help into multiple topics.
+1.024
+Added clan zones to lookup table.
+Added shop field to db.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
