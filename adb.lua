@@ -992,7 +992,8 @@ function adbDrainOne()
 
   if (adb_options.cockpit.update_db_on_loot and
       not adbIsItemIgnored(adb_drain_loot_item.name, adb_drain_loot_item.zone, adb_state.ignore_db_updates_for_items)) or
-     not adbIsItemIgnored(adb_drain_loot_item.name, adb_drain_loot_item.zone, adb_state.ignore_aucto_actions_for_items) then
+     (adb_options.cockpit.enable_auto_actions and
+      not adbIsItemIgnored(adb_drain_loot_item.name, adb_drain_loot_item.zone, adb_state.ignore_aucto_actions_for_items)) then
     local ctx = {
       drain_inv_item = adb_drain_inv_item,
       drain_loot_item = adb_drain_loot_item,
