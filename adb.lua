@@ -2117,11 +2117,13 @@ function adbIdReportAddLocationInfo(report, location)
     return report
   end
 
-  if #location.mobs then
-    report = report .. "\n" .. adb_options.colors.section .. " Looted from:"
-  end
-
+  local header_added = false
   for k, v in pairs(location.mobs) do
+    if not header_added then
+      report = report .. "\n" .. adb_options.colors.section .. " Looted from:"
+      header_added = true
+    end
+
     report = report .. "\n" .. adb_options.colors.value .. " " .. v.colorName
              .. adb_options.colors.default .. " [" .. adb_options.colors.value .. v.zone .. adb_options.colors.default .. "] "
              .. "Room(s) [" .. adb_options.colors.value .. v.rooms .. adb_options.colors.default .. "]"
@@ -3440,6 +3442,8 @@ Added clan zones to lookup table.
 Added shop field to db.
 1.025
 Fixed another error for characters without identify wish and added message to disable db updates.
+1.026
+Fixed double location lines for aid items.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }

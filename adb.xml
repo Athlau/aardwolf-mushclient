@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.025"
+   version="1.026"
    >
 <description trim="y">
 <![CDATA[
@@ -33,8 +33,8 @@
 
 @w Type @Gadb help@w for more information.
 
-1.025
-Fixed another error for characters without identify wish and added message to disable db updates.
+1.026
+Fixed double location lines for aid items.
 ]]>
 </description>
 
