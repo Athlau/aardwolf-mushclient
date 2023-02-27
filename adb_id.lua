@@ -47,6 +47,9 @@ function adbIdentifyItem(command, ready_callback, context, draining_queue)
     stats = {},
     enchants = {},
     skillMods = {},
+    location = {
+      mobs = {},
+    },
     identifyLevel = "full",
     identifyVersion = adb_id_version,
   }
