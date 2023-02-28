@@ -1691,14 +1691,8 @@ function adbShopIdreadyCB(obj, ctx)
     return
   end
 
-  adbDebug(function ()
-      if ctx.item.name ~= obj.stats.name then
-        adbDebug("name changed from " .. ctx.item.name .. " to " .. obj.stats.name)
-      end
-    end, 2)
-
   -- TODO check if need to update identify version, full/partial id etc.
-  if adbGetBlootLevel(obj.stats.name) > 0 then
+  if ctx.item.name ~= obj.stats.name or adbGetBlootLevel(obj.stats.name) > 0 then
     AnsiNote(ColoursToANSI("@CADB: shop content changed, ignoring @w[" .. obj.colorName .. "@w]"))
   elseif ctx.item.qty == "---" then
     obj.location = {
