@@ -1608,12 +1608,19 @@ function adbOnAdbShopListReady(style_lines)
     end
 
     local number, level, price, qty, name, color_name
-    _, _, number, level, price, qty, name = line:find("^%s*(%d+)%s+(%d+)%s+(%d+)%s+(%S+)%s+(.-)$")
+    _, _, number, level, price, qty, name = line:find("^%s*(%d+)%s+(%d+)%s+(%d+ ?%a*)%s+(%S+)%s+(.-)$")
 
     if number ~= nil then
-      _, _, color_name = color_line:find("^@w%s*%d+%s+%d+%s+%d+%s+%S+%s+(.-)@w$")
+      local pattern = "%s*%d+%s+%d+%s+%d+ ?%a*%s+%S+%s+(.-)"
+      _, _, color_name = color_line:find("^@w" .. pattern .. "@w$")
       if color_name == nil then
-        _, _, color_name = color_line:find("^@w%s*%d+%s+%d+%s+%d+%s+%S+%s+(.-)$")
+        _, _, color_name = color_line:find("^@w" ..  pattern .. "$")
+      end
+      if color_name == nil then
+        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "$")
+      end
+      if color_name == nil then
+        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "@w$")
       end
       if color_name == nil then
         adbErr("Can't parse color name in [" .. color_line .. "]")
@@ -1684,8 +1691,16 @@ function adbShopIdreadyCB(obj, ctx)
     return
   end
 
+  adbDebug(function ()
+      if ctx.item.name ~= obj.stats.name then
+        adbDebug("name changed from " .. ctx.item.name .. " to " .. obj.stats.name)
+      end
+    end, 2)
+
   -- TODO check if need to update identify version, full/partial id etc.
-  if ctx.item.qty == "---" then
+  if adbGetBlootLevel(obj.stats.name) > 0 then
+    AnsiNote(ColoursToANSI("@CADB: shop content changed, ignoring @w[" .. obj.colorName .. "@w]"))
+  elseif ctx.item.qty == "---" then
     obj.location = {
       zone = ctx.zone,
       mobs = {},
@@ -1996,6 +2011,8 @@ adbAreaNameXref = {
   ["From Knights of Perdition"] = "perdition",
   ["From Loqui"] = "loqui",
   ["From House of Touchstone"] = "touchstone",
+  ["Aardwolf Estates 2000"] = "manor3",
+  ["Fractals of the Weave"] = "fractal",
 }
 
 ------ Identify results reporting ------
@@ -3444,6 +3461,9 @@ Added shop field to db.
 Fixed another error for characters without identify wish and added message to disable db updates.
 1.026
 Fixed double location lines for aid items.
+1.027
+Fixed adb shop updates when shop content changes during scan.
+Added Fractals of the Weave and Aardwolf Estates 2000 zones.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
