@@ -1617,10 +1617,10 @@ function adbOnAdbShopListReady(style_lines)
         _, _, color_name = color_line:find("^@w" ..  pattern .. "$")
       end
       if color_name == nil then
-        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "$")
+        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "@w$")
       end
       if color_name == nil then
-        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "@w$")
+        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "$")
       end
       if color_name == nil then
         adbErr("Can't parse color name in [" .. color_line .. "]")
@@ -1692,8 +1692,21 @@ function adbShopIdreadyCB(obj, ctx)
   end
 
   -- TODO check if need to update identify version, full/partial id etc.
-  if ctx.item.name ~= obj.stats.name or adbGetBlootLevel(obj.stats.name) > 0 then
-    AnsiNote(ColoursToANSI("@CADB: shop content changed, ignoring @w[" .. obj.colorName .. "@w]"))
+  if ctx.item.colorName ~= obj.colorName then
+    AnsiNote(ColoursToANSI("@CADB: shop content changed, ignoring @w[" .. ctx.item.colorName .. "@w] got [" .. obj.colorName .. "@w]"))
+    -- there's no point to continue because all subsequent item indicies are out of sync too now
+    -- let's try to find if some items were gone from the shop on timer and resync
+    while #adb_shop_queue > 0 do
+      ctx.item = adb_shop_queue[1]
+      table.remove(adb_shop_queue, 1)
+      if ctx.item.colorName == obj.colorName then
+        break
+      end
+    end
+  end
+
+  if ctx.item.colorName ~= obj.colorName or adbGetBlootLevel(obj.stats.name) > 0 then
+    -- Intentionally left blank
   elseif ctx.item.qty == "---" then
     obj.location = {
       zone = ctx.zone,
@@ -3458,6 +3471,8 @@ Fixed double location lines for aid items.
 1.027
 Fixed adb shop updates when shop content changes during scan.
 Added Fractals of the Weave and Aardwolf Estates 2000 zones.
+1.028
+Abort adb shop command on first mismatched item.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }

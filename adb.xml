@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.027"
+   version="1.028"
    >
 <description trim="y">
 <![CDATA[
@@ -33,9 +33,8 @@
 
 @w Type @Gadb help@w for more information.
 
-1.027
-Fixed adb shop updates when shop content changes during scan.
-Added Fractals of the Weave and Aardwolf Estates 2000 zones.
+1.028
+Abort adb shop command on first mismatched item.
 ]]>
 </description>
 
