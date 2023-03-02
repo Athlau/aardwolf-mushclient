@@ -3473,6 +3473,8 @@ Fixed adb shop updates when shop content changes during scan.
 Added Fractals of the Weave and Aardwolf Estates 2000 zones.
 1.028
 Abort adb shop command on first mismatched item.
+1.029
+Show error message for outdated mush clients.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
@@ -3510,7 +3512,17 @@ function OnPluginEnable()
   OnPluginConnect()
 end
 
+local aard_extras = require "aard_lua_extras"
+local adb_min_client_version = 2249
+function adbCheckClientVersion()
+  local version, err = aard_extras.PackageVersion()
+  if err == nil and  version <= adb_min_client_version then
+    adbErr("ADB requires MUSH client version " .. tostring(adb_min_client_version) .. " or later! Your client version is " .. tostring(version))
+  end
+end
+
 function OnPluginConnect()
+  adbCheckClientVersion()
   adbLoadOptions()
   adbDbLoad()
   adbCacheLoad()

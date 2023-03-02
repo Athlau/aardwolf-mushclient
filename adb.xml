@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.028"
+   version="1.029"
    >
 <description trim="y">
 <![CDATA[
@@ -33,8 +33,8 @@
 
 @w Type @Gadb help@w for more information.
 
-1.028
-Abort adb shop command on first mismatched item.
+1.029
+Show error message for outdated mush clients.
 ]]>
 </description>
 
