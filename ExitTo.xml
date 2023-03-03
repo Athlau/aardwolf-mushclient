@@ -138,8 +138,8 @@ help_message = [[
 
    Note: minimap_to string in [] should appear as in ASCII based map, see "help maptype" in game.
    If you want to copy-paste run "map" command in game (If you're using default minimap window
-   plugin make sure it's options "Also Show Map in Main Output" is enabled in right-click menu).
-   Allow of the above is only needed if you're not sure what pattern should be used in [],
+   plugin make sure it's option "Also Show Map in Main Output" is enabled in right-click menu).
+   All of the above is only needed if you're not sure what pattern should be used in [],
    minimap_to itself works regardless of maptype or minimap window plugin settings.
 ]]
 
