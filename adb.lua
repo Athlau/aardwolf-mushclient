@@ -1608,16 +1608,18 @@ function adbOnAdbShopListReady(style_lines)
     end
 
     local number, level, price, qty, name, color_name
-    _, _, number, level, price, qty, name = line:find("^%s*(%d+)%s+(%d+)%s+(%d+ ?%a*)%s+(%S+)%s+(.-)$")
+    _, _, number, level, price, qty, name = line:find("^%s*(%d+)%s+(%d+)%s+(%d+ ?%a*)%s+(%S+)%s+(.-)%s*$")
 
     if number ~= nil then
-      local pattern = "%s*%d+%s+%d+%s+%d+ ?%a*%s+%S+%s+(.-)"
-      _, _, color_name = color_line:find("^@w" .. pattern .. "@w$")
+      local pattern = "%s*%d+%s+%d+%s+%d+ ?%a*%s+%S+%s+(.-)%s*"
+      -- strange item in Radiance Woods shop, where some spaces appear after @w
+      --[@w  1    200      950  ---  @C+++@WCure Poison@C+++@w  ]
+      _, _, color_name = color_line:find("^@w" .. pattern .. "@w%s*$")
       if color_name == nil then
         _, _, color_name = color_line:find("^@w" ..  pattern .. "$")
       end
       if color_name == nil then
-        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "@w$")
+        _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "@w%s*$")
       end
       if color_name == nil then
         _, _, color_name = color_line:find("^@x%d%d%d" ..  pattern .. "$")
