@@ -2022,6 +2022,9 @@ adbAreaNameXref = {
   ["Fractals of the Weave"] = "fractal",
   ["Chakra Spire"] = "chakra",
   ["Prairie Village Estates"] = "manorville",
+  ["From The Order of Shadokil"] = "shadokil",
+  ["From The Society of Tanelorn"] = "tanelorn",
+  ["From Vanir"] = "vanir",
 }
 
 ------ Identify results reporting ------
