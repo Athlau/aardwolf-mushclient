@@ -2021,6 +2021,7 @@ adbAreaNameXref = {
   ["Aardwolf Estates 2000"] = "manor3",
   ["Fractals of the Weave"] = "fractal",
   ["Chakra Spire"] = "chakra",
+  ["Prairie Village Estates"] = "manorville",
 }
 
 ------ Identify results reporting ------
