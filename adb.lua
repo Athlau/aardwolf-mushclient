@@ -2159,12 +2159,8 @@ function adbShortenRoomsString(rooms)
         last = nil
       end
     else
-      if result ~= "" then
-        result = result .. ", "
-      end
       result = result .. tostring(v)
       start = v
-      last = nil
     end
   end)
   if last then
