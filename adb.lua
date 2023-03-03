@@ -2020,6 +2020,7 @@ adbAreaNameXref = {
   ["From House of Touchstone"] = "touchstone",
   ["Aardwolf Estates 2000"] = "manor3",
   ["Fractals of the Weave"] = "fractal",
+  ["Chakra Spire"] = "chakra",
 }
 
 ------ Identify results reporting ------
@@ -2136,6 +2137,43 @@ function adbIdReportAddValue(report, value, label, color, show_plus)
   return report
 end
 
+function adbShortenRoomsString(rooms)
+  local rooms_table = {}
+  local result = ""
+  for room in rooms:gmatch("[^, ]+") do
+    table.insert(rooms_table, tonumber(room))
+  end
+  table.sort(rooms_table, function(a, b) return a < b end)
+
+  local start, last
+  table.foreach(rooms_table, function(k, v)
+    if start then
+      if v == (last and last or start) + 1 then
+        last = v
+      else
+        if last then
+          result = result .. (last == start + 1 and ", " or "-") .. tostring(last)
+        end
+        result = result .. ", " .. tostring(v)
+        start = v
+        last = nil
+      end
+    else
+      if result ~= "" then
+        result = result .. ", "
+      end
+      result = result .. tostring(v)
+      start = v
+      last = nil
+    end
+  end)
+  if last then
+    result = result .. (last == start + 1 and ", " or "-") .. tostring(last)
+  end
+
+  return result
+end
+
 function adbIdReportAddLocationInfo(report, location)
   if location == nil then
     return report
@@ -2150,7 +2188,7 @@ function adbIdReportAddLocationInfo(report, location)
 
     report = report .. "\n" .. adb_options.colors.value .. " " .. v.colorName
              .. adb_options.colors.default .. " [" .. adb_options.colors.value .. v.zone .. adb_options.colors.default .. "] "
-             .. "Room(s) [" .. adb_options.colors.value .. v.rooms .. adb_options.colors.default .. "]"
+             .. "Room(s) [" .. adb_options.colors.value .. adbShortenRoomsString(v.rooms) .. adb_options.colors.default .. "]"
   end
 
   return report
@@ -3475,6 +3513,9 @@ Added Fractals of the Weave and Aardwolf Estates 2000 zones.
 Abort adb shop command on first mismatched item.
 1.029
 Show error message for outdated mush clients.
+1.030
+Shorten mob rooms display.
+Add Chakra Spire zone.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
