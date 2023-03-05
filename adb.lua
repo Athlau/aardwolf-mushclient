@@ -1730,6 +1730,7 @@ function adbShopIdreadyCB(obj, ctx)
           zone = adbAreaNameXref[obj.stats.foundat],
           mobs = {},
         }
+        adbStripEnchants(obj)
         adbCacheAdd(obj)
       else
         adbErr("Don't know short zone name for " .. obj.stats.foundat)
@@ -2430,6 +2431,20 @@ local adb_bloot_names = {
   Divine = 20,
   Godly = 21,
 }
+
+function adbStripEnchants(item)
+  if item.enchants == nil then
+    return
+  end
+
+  for k, v in pairs(adb_enchant_stats) do
+    if item.enchants[v] ~= nil then
+      item.stats[v] = adbGetStatNumberSafe(item.stats[v1]) - item.enchants[v]
+    end
+  end
+
+  item.enchants = {}
+end
 
 local adb_diff_fields = {"score", "weight", "worth", "avedam", "level"}
 function adbDiffItems(item1, item2, ignore_enchants)
@@ -3518,6 +3533,9 @@ Show error message for outdated mush clients.
 1.030
 Shorten mob rooms display.
 Add Chakra Spire zone.
+1.031
+Strip enchants when adding player sold items from shops to DB.
+Fix for some items in radiance woods shop.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
