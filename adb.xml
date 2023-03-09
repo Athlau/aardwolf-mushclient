@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.031"
+   version="1.032"
    >
 <description trim="y">
 <![CDATA[
@@ -34,8 +34,7 @@
 @w Type @Gadb help@w for more information.
 
 1.031
-Strip enchants when adding player sold items from shops to DB.
-Fix for some items in radiance woods shop.
+Fix error when trying to save db when client is disconnected.
 ]]>
 </description>
 

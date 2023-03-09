@@ -3073,6 +3073,11 @@ function adbDbLoad()
 end
 
 function adbDbSave()
+  local opened = adb_db:isopen()
+  if not opened then
+    adbDbOpen()
+  end
+
   adbDebug("adbDbSave", 1)
   adbDbCheckExecute("PRAGMA wal_checkpoint(FULL);")
 
@@ -3080,7 +3085,9 @@ function adbDbSave()
 
   if adb_db:isopen() then
     adb_db:close()
-    adbDbOpen()
+    if opened then
+      adbDbOpen()
+    end
   end
 end
 
@@ -3536,6 +3543,8 @@ Add Chakra Spire zone.
 1.031
 Strip enchants when adding player sold items from shops to DB.
 Fix for some items in radiance woods shop.
+1.032
+Fix error when trying to save db when client is disconnected.
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
