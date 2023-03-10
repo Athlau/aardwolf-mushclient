@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.032"
+   version="1.033"
    >
 <description trim="y">
 <![CDATA[
@@ -33,8 +33,8 @@
 
 @w Type @Gadb help@w for more information.
 
-1.031
-Fix error when trying to save db when client is disconnected.
+1.033
+Add Fellchantry zone
 ]]>
 </description>
 

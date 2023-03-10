@@ -2028,6 +2028,7 @@ adbAreaNameXref = {
   ["From The Order of Shadokil"] = "shadokil",
   ["From The Society of Tanelorn"] = "tanelorn",
   ["From Vanir"] = "vanir",
+  ["Fellchantry"] = "chantry",
 }
 
 ------ Identify results reporting ------
@@ -3545,6 +3546,8 @@ Strip enchants when adding player sold items from shops to DB.
 Fix for some items in radiance woods shop.
 1.032
 Fix error when trying to save db when client is disconnected.
+1.033
+Add Fellchantry zone
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
