@@ -1583,7 +1583,7 @@ function adbOnAdbShop(name, line, wildcards)
     zone = gmcp("room.info.zone"),
     room = gmcp("room.info.num"),
   }
-  adb_shop_queue = {},
+  adb_shop_queue = {}
 
   Capture.untagged_output(
     "list",
@@ -2013,7 +2013,6 @@ adbAreaNameXref = {
   ["From The Watchmen of Aardwolf"] = "watchmen",
   ["From The Emerald Knights"] = "emerald",
   ["From Order of the Bard"] = "bard",
-  ["From Crusaders of the Nameless One"] = "crusaders",
   ["From The Great Circle of Druids"] = "druid",
   ["From The Tribes of the Amazon"] = "amazonclan",
   ["From The Soul Pyre"] = "pyre",
