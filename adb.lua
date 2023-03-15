@@ -2029,6 +2029,7 @@ adbAreaNameXref = {
   ["From The Society of Tanelorn"] = "tanelorn",
   ["From Vanir"] = "vanir",
   ["Fellchantry"] = "chantry",
+  ["Sea King's Dominion"] = "seaking",
 }
 
 ------ Identify results reporting ------
@@ -3548,6 +3549,8 @@ Fix for some items in radiance woods shop.
 Fix error when trying to save db when client is disconnected.
 1.033
 Add Fellchantry zone
+1.034
+Add Sea King's Dominion zone
 @R-----------------------------------------------------------------------------------------------
   ]],
 }
