@@ -1069,9 +1069,14 @@ end
 function adbItemLocationAddMob(item, mob)
     -- Only add mob if the mob's zone matches item foundAt
     if item.stats.foundat ~= nil and adbAreaNameXref[item.stats.foundat] ~= mob.zone then
-        AnsiNote(ColoursToANSI("@CIgnoring @w" .. mob.colorName .. "@w in zone " .. mob.zone .. " for item @w[" ..
-                                   item.colorName .. "@w]"))
-        return
+        if mob.zone == "sohtwo" and adbAreaNameXref[item.stats.foundat] == "soh" then
+          -- intentionally left blank
+          -- soh and sohtwo items have the same FoundAt field, so stick to the mob location for now
+        else
+          AnsiNote(ColoursToANSI("@CIgnoring @w" .. mob.colorName .. "@w in zone " .. mob.zone .. " for item @w[" ..
+                                    item.colorName .. "@w]"))
+          return
+        end
     end
 
     local key = mob.zone .. "->" .. mob.colorName
@@ -1125,7 +1130,12 @@ function adbDrainIdResultsReadyCB(item, ctx)
             local item_zone = ctx.drain_loot_item.zone
             if item.stats.foundat ~= nil then
                 if adbAreaNameXref[item.stats.foundat] ~= nil then
-                    item_zone = adbAreaNameXref[item.stats.foundat]
+                    if item_zone == "sohtwo" and adbAreaNameXref[item.stats.foundat] == "soh" then
+                      -- intentionally left blank
+                      -- soh and sohtwo items have the same FoundAt field, so stick to the mob location for now
+                    else
+                      item_zone = adbAreaNameXref[item.stats.foundat]
+                    end
                 else
                     adbErr("Don't know short zone name for " .. item.stats.foundat)
                 end
@@ -3613,6 +3623,10 @@ Fix error when trying to save db when client is disconnected.
 Add Fellchantry zone
 1.034
 Add Sea King's Dominion zone
+1.035
+Fixed loot from sohtwo zone.
+Fixed some typos.
+Reformatted lua files.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
