@@ -1070,12 +1070,12 @@ function adbItemLocationAddMob(item, mob)
     -- Only add mob if the mob's zone matches item foundAt
     if item.stats.foundat ~= nil and adbAreaNameXref[item.stats.foundat] ~= mob.zone then
         if mob.zone == "sohtwo" and adbAreaNameXref[item.stats.foundat] == "soh" then
-          -- intentionally left blank
-          -- soh and sohtwo items have the same FoundAt field, so stick to the mob location for now
+            -- intentionally left blank
+            -- soh and sohtwo items have the same FoundAt field, so stick to the mob location for now
         else
-          AnsiNote(ColoursToANSI("@CIgnoring @w" .. mob.colorName .. "@w in zone " .. mob.zone .. " for item @w[" ..
-                                    item.colorName .. "@w]"))
-          return
+            AnsiNote(ColoursToANSI("@CIgnoring @w" .. mob.colorName .. "@w in zone " .. mob.zone .. " for item @w[" ..
+                                       item.colorName .. "@w]"))
+            return
         end
     end
 
@@ -1131,10 +1131,10 @@ function adbDrainIdResultsReadyCB(item, ctx)
             if item.stats.foundat ~= nil then
                 if adbAreaNameXref[item.stats.foundat] ~= nil then
                     if item_zone == "sohtwo" and adbAreaNameXref[item.stats.foundat] == "soh" then
-                      -- intentionally left blank
-                      -- soh and sohtwo items have the same FoundAt field, so stick to the mob location for now
+                        -- intentionally left blank
+                        -- soh and sohtwo items have the same FoundAt field, so stick to the mob location for now
                     else
-                      item_zone = adbAreaNameXref[item.stats.foundat]
+                        item_zone = adbAreaNameXref[item.stats.foundat]
                     end
                 else
                     adbErr("Don't know short zone name for " .. item.stats.foundat)
@@ -1373,7 +1373,8 @@ function adbOnIdentifyCommand(name, line, wildcards)
                                     adb_options.cockpit.identify_channel_format])
     local ctx = {
         channel = wildcards.channel,
-        format = identify_format
+        format = identify_format,
+        id = wildcards.id
     }
     adbIdentifyItem("id " .. wildcards.id .. wildcards.worn, adbOnIdentifyCommandIdResultsReadyCB, ctx)
 end
@@ -1385,6 +1386,7 @@ end
 function adbProcessIdResults(obj, ctx)
     if (obj.stats.name == nil) then
         adbDebug("item not found", 2)
+        adbInfo(ctx.id .. " not found.")
         return
     end
 
@@ -1729,7 +1731,7 @@ end
 
 function adbShopIdreadyCB(obj, ctx)
     if obj.stats.id == nil then
-        adbErr("Failed to appraise " .. ctx.item.number)
+        adbInfo("Failed to appraise " .. ctx.item.number .. " shop content changed.")
         adbShopQueueDrain()
         return
     end
@@ -2073,6 +2075,117 @@ adbAreaNameXref = {
     ["Sea King's Dominion"] = "seaking"
 }
 
+------  ACMP -------
+local acmp_ctx = {}
+function adbOnAcmp(name, line, wildcards)
+    adbInfo(line)
+    if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
+        adbInfo("Unknown format " .. wildcards.format .. " using default")
+    end
+    local format = adb_options[wildcards.format] or adb_options[adb_options.cockpit.identify_format]
+
+    acmp_ctx = {
+        item1 = wildcards.item1,
+        item2 = wildcards.item2,
+        format = format
+    }
+    adbIdentifyItem("id " .. wildcards.item1, adbAcmpItem1IdReadyCB, acmp_ctx)
+end
+
+function adbAcmpItem1IdReadyCB(obj, ctx)
+    if obj.stats.id == nil then
+        adbInfo(ctx.item1 .. " not found.")
+        return
+    end
+    acmp_ctx["obj1"] = obj
+
+    if ctx.item2 ~= "" then
+        adbIdentifyItem("id " .. ctx.item2, adbAcmpItem2IdReadyCB, acmp_ctx)
+        return
+    end
+
+    Capture.tagged_output("eqdata", "{eqdata}", "{/eqdata}", false, true, true, true, adbAcmpEqDataReadyCB, false)
+end
+
+local wearloc_to_flag_xref = {
+    ["0"] = "light",
+    ["1"] = "head",
+    ["2"] = "eyes",
+    ["3"] = "ear",
+    ["4"] = "ear",
+    ["5"] = "neck",
+    ["6"] = "neck",
+    ["7"] = "back",
+    ["8"] = "medal",
+    ["9"] = "medal",
+    ["10"] = "medal",
+    ["11"] = "medal",
+    ["12"] = "torso",
+    ["13"] = "body",
+    ["14"] = "waist",
+    ["15"] = "arms",
+    ["16"] = "wrist",
+    ["17"] = "wrist",
+    ["18"] = "hands",
+    ["19"] = "finger",
+    ["20"] = "finger",
+    ["21"] = "legs",
+    ["22"] = "feet",
+    ["23"] = "shield",
+    ["24"] = "wield",
+    ["25"] = "wield",
+    ["26"] = "hold",
+    ["27"] = "float",
+    -- ["28"] = "???",
+    -- ["29"] = "???",
+    ["30"] = "above",
+    ["31"] = "portal",
+    ["32"] = "sleeping"
+}
+
+function adbAcmpEqDataReadyCB(style_lines)
+    adbDebug("adbAcmpEqDataReadyCB", 2)
+    local found_worn_item = false
+    for _, v in ipairs(style_lines) do
+        local line = strip_colours(StylesToColours(v))
+        local id, wear_loc
+        _, _, id, wear_loc = line:find("^(%d+),.*,.*,.*,.*,.*,(%d+),.*$")
+        if id ~= nil and wear_loc ~= nil then
+            if wearloc_to_flag_xref[wear_loc] ~= nil and acmp_ctx.obj1.stats.wearable ~= nil and
+                acmp_ctx.obj1.stats.wearable:find(wearloc_to_flag_xref[wear_loc]) then
+                found_worn_item = true
+                adbIdentifyItem("id " .. id .. " worn", adbAcmpItem2IdReadyCB, acmp_ctx)
+            end
+        end
+    end
+    if not found_worn_item then
+        adbInfo("No items worn as " .. tostring(acmp_ctx.obj1.stats.wearable))
+    end
+end
+
+function adbAcmpItem2IdReadyCB(obj, ctx)
+    if obj.stats.id == nil then
+        if ctx.item2 ~= "" then
+            adbInfo(ctx.item2 .. " not found.")
+        else
+            adbInfo("worn item not found.")
+        end
+        return
+    end
+
+    local base_name = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(obj.colorName) or obj.colorName
+    base_name = "@W" .. tostring(obj.stats.id) .. "@w:" .. base_name
+    local item_name = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(ctx.obj1.colorName) or
+                          ctx.obj1.colorName
+    item_name = "@W" .. tostring(ctx.obj1.stats.id) .. "@w:" .. item_name
+    local worn = ctx.item2 == "" and "worn " or ""
+    AnsiNote(ColoursToANSI("@CComparing @w[" .. item_name .. "@w] @Cto " .. worn .. "@w[" .. base_name .. "@w]"))
+
+    local diff = adbDiffItems(obj, ctx.obj1, false)
+    local message = adbIdReportAddDiffString("", diff, ctx.format, true)
+    AnsiNote(ColoursToANSI(message))
+end
+
 ------ Identify results reporting ------
 function adbGetStatNumberSafe(stat)
     return stat ~= nil and stat or 0
@@ -2306,10 +2419,12 @@ function adbGetSpellsString(spells)
     return result
 end
 
-function adbIdReportAddDiffString(report, diff, format)
-    report = report .. "\n" .. adb_options.colors.section .. " Bloot changes:"
-    if format.sections_name_newline then
-        report = report .. "\n"
+function adbIdReportAddDiffString(report, diff, format, no_prefix_lines)
+    if not no_prefix_lines then
+        report = report .. "\n" .. adb_options.colors.section .. " Bloot changes:"
+        if format.sections_name_newline then
+            report = report .. "\n"
+        end
     end
 
     if (diff.stats.level ~= nil) then
@@ -3293,6 +3408,7 @@ local adb_help = {
     ["commands"] = [[
 @R-----------------------------------------------------------------------------------------------
 @Waid@w           - identify an item, see @Gadb help aid@w for more info.
+@Wacmp@w          - compare items, see @Gadb help acmp@w for more info.
 @Wadb options@w   - various adb options, see @Gadb help options@w for more details.
 @Wadb format@w    - display format settings, see @Gadb help format@w for more details.
 @Wadb info@w      - show adb plugin information.
@@ -3322,6 +3438,24 @@ local adb_help = {
  @Waid sword worn t Sletch spam incoming: format.full@w - spam Sletch with full details :P
 @R-----------------------------------------------------------------------------------------------
   ]],
+    ["acmp"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Wacmp <item1> [item2] [format.name]@w
+ This command will compare given <item1> to an @Gitem2@w or an item(s)
+
+Examples:
+@Wacmp dag card@w  - compare "dag" and "card" using format specified in @Gidentify_format@w
+ @CComparing @w[@W2777147290@w:@YDagger of @RAardwolf@w] @Cto @w[@W2723916584@w:@G(@WSparkling 6@G)@w a @Rc@ra@Rr@rd @wsword]
+ @D[@C+98@D lvl] [@M+312@Davg] [@Y+1218@Dscore] [@G+5@Ddr @G+9@Dhr] [@Y-10@Dstats] [@R-7@Dint @R-1@Ddex @R-2@Dluk] [@R-40@Dhp @R-20@Dmn] [@R-10@Delectric] [@W-15@Dwgt] [@W-5000@Dg]
+
+@Wacmp card@w  - compare item "card" to worn items using format specified in @Gidentify_format@w
+ @CComparing @w[@W2723916584@w:@G(@WSparkling 6@G)@w a @Rc@ra@Rr@rd @wsword] @Cto worn @w[@W2777147290@w:@YDagger of @RAardwolf@w]
+ @D[@C-98@D lvl] [@M-312@Davg] [@Y-1218@Dscore] [@R-5@Ddr @R-9@Dhr] [@Y+10@Dstats] [@G+7@Dint @G+1@Ddex @G+2@Dluk] [@G+40@Dhp @G+20@Dmn] [@G+10@Delectric] [@W+15@Dwgt] [@W+5000@Dg]
+ @w
+ @CComparing @w[@W2723916584@w:@G(@WSparkling 6@G)@w a @Rc@ra@Rr@rd @wsword] @Cto worn @w[@W2777147295@w:@YDagger of @RAardwolf@w]
+ @D[@C-98@D lvl] [@M-312@Davg] [@Y-1218@Dscore] [@R-5@Ddr @R-9@Dhr] [@Y+10@Dstats] [@G+7@Dint @G+1@Ddex @G+2@Dluk] [@G+40@Dhp @G+20@Dmn] [@G+10@Delectric] [@W+20@Dwgt] [@W+5000@Dg]
+@R-----------------------------------------------------------------------------------------------
+      ]],
     ["options"] = [[
 @R-----------------------------------------------------------------------------------------------
 @Wadb options [edit|reset|set <group> <option> [value] ]@w
@@ -3627,6 +3761,9 @@ Add Sea King's Dominion zone
 Fixed loot from sohtwo zone.
 Fixed some typos.
 Reformatted lua files.
+1.036
+Added acmp command.
+Added error message when item's not found for aid command.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }

@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.035"
+   version="1.036"
    >
 <description trim="y">
 <![CDATA[
@@ -33,10 +33,9 @@
 
 @w Type @Gadb help@w for more information.
 
-1.035
-Fixed loot from sohtwo zone.
-Fixed some typos.
-Reformatted lua files.
+1.036
+Added acmp command.
+Added error message when item's not found for aid command.
 ]]>
 </description>
 
@@ -277,6 +276,16 @@ Reformatted lua files.
   <alias
    script="adbOnAdbShop"
    match="^adb shop(?: (?<all>all))?$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
+   script="adbOnAcmp"
+   match="^acmp (?<item1>[^\s]+)(?: (?<item2>(?!format\.)[^\s]+))?(?: (?<format>format\..+))?$"
    regexp="y"
    enabled="y"
    send_to="12"
