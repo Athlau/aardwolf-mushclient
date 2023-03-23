@@ -3310,6 +3310,8 @@ function adbOnAdbInfo()
 end
 
 function adbOnAdbFind(name, line, wildcards)
+    adbDbSave()
+
     adbInfo(line)
     if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
         adbInfo("Unknown format " .. wildcards.format .. " using default")
@@ -3764,6 +3766,8 @@ Reformatted lua files.
 1.036
 Added acmp command.
 Added error message when item's not found for aid command.
+1.037
+Sync cache before doing adb find.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
