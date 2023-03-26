@@ -13,6 +13,9 @@ local adb_state = {
     ignore_aucto_actions_for_items = {}
 }
 
+local adb_external_loot_filters = {
+}
+
 local adb_options = {}
 
 local adb_options_description = {
@@ -84,6 +87,14 @@ dsr:a leather helmet
 dsr:a steel shield
 drageran:leg of venison
 drageran:a wicked looking riding crop
+temple:the Chakram of Light
+temple:the Chakram of Darkness
+temple:a socketed bracer
+temple:a socketed earring
+temple:a blood-red ruby
+temple:a sparkling diamond
+temple:a topaz of worth
+temple:a magical bonding agent
 ]],
             auto_adb_off_for_zones = [[icefall
 oradrin
@@ -740,6 +751,27 @@ function adbCacheGetItemByNameAndFoundAt(color_name, found_at)
     return result
 end
 
+function adbCacheGetItemsByName(color_name)
+    local result = {}
+
+    -- there might be multiple items with same name in DB
+    local db_result = adbDbGetItemsByName(color_name)
+    for k, v in pairs(db_result) do
+        adbCacheAdd(v)
+    end
+
+    for k, v in pairs(adb_recent_cache) do
+        if k == "meta" then
+            -- skip meta field
+        elseif v.colorName == color_name then
+            table.insert(result, v)
+            break
+        end
+    end
+
+    return result
+end
+
 function adbCacheItemUpdateIdentify(cache_item, item)
     assert(cache_item.colorName == item.colorName)
     cache_item.cache.dirty = true
@@ -827,10 +859,6 @@ function adbCacheAdd(item, skip_cache_search)
     else
         adbDebug(item.colorName .. " already in cache, updated timestamp", 3)
         cache_item.cache.timestamp = os.time()
-        if adb_options.cockpit.show_db_updates then
-            AnsiNote(ColoursToANSI(adbIdReportAddLocationInfo(
-                "@CADB updated cache item " .. cache_item.colorName .. "@C :", cache_item.location)))
-        end
     end
 end
 ------ invitem and looted items stacks ------
@@ -883,6 +911,19 @@ function adbOnItemLooted(id, item)
         return
     end
 
+    for _, v in pairs(adb_external_loot_filters) do
+        local ok, result
+        ok, result = pcall(v.func, id, bloot, item)
+        if ok then
+            if result then
+                CallPlugin(v.plugin, v.callback, id, bloot, serialize.save_simple(item))
+                return
+            end
+        else
+            adbInfo("External plugin " .. v.plugin .. " loot filter failed with: " .. result)
+        end
+    end
+
     if not adb_options.cockpit.enable_auto_actions or adb_state.adb_off_for_current_zone or
         adbIsItemIgnored(item.stats.name, item.location.zone, adb_state.ignore_aucto_actions_for_items) then
         return
@@ -892,12 +933,16 @@ function adbOnItemLooted(id, item)
     cmd = adb_options.auto_actions.on_normal_looted_lua
     if cmd ~= "" then
         cmd = adbReplacePatterns(cmd, id, bloot, item.stats.name, item.colorName, item, true)
-        local lua = loadstring(cmd)
+        local lua, err, ok
+        lua, err = loadstring(cmd)
         if lua ~= nil then
             adbDebug("Executing lua " .. cmd, 3)
-            lua()
+            ok, err = pcall(lua)
+            if not ok then
+                adbInfo("Failed executing on_normal_looted_lua: " .. err)
+            end
         else
-            adbInfo("Failed to compile lua " .. cmd)
+            adbInfo("Failed to compile lua " .. cmd .. "\n with error: " .. err)
         end
     end
     cmd = adb_options.auto_actions.on_normal_looted_cmd
@@ -935,6 +980,7 @@ end
 
 function adbOnBlootItemLooted(id, drain_loot_item)
     adbDebug("adbOnBlootItemLooted " .. id .. " " .. drain_loot_item.name, 2)
+
     if not adb_options.cockpit.enable_auto_actions or adb_state.adb_off_for_current_zone or
         adbIsItemIgnored(drain_loot_item.name, drain_loot_item.zone, adb_state.ignore_aucto_actions_for_items) or
         (adb_options.auto_actions.on_bloot_looted_cmd == "" and adb_options.auto_actions.on_bloot_looted_lua == "") then
@@ -953,12 +999,16 @@ function adbOnBlootItemLooted(id, drain_loot_item)
     cmd = adb_options.auto_actions.on_bloot_looted_lua
     if cmd ~= "" then
         cmd = adbReplacePatterns(cmd, id, bloot, drain_loot_item.name, drain_loot_item.colorName, base_item, true)
-        local lua = loadstring(cmd)
+        local lua, err, ok
+        lua, err = loadstring(cmd)
         if lua ~= nil then
             adbDebug("Executing lua " .. cmd, 3)
-            lua()
+            ok, err = pcall(lua)
+            if not ok then
+                adbInfo("Failed executing on_bloot_looted_lua: " .. err)
+            end
         else
-            adbInfo("Failed to compile lua " .. cmd)
+            adbInfo("Failed to compile lua " .. cmd .. "\n with error: " .. err)
         end
     end
     cmd = adb_options.auto_actions.on_bloot_looted_cmd
@@ -2833,6 +2883,17 @@ function adbDbGetItemByNameAndFoundAt(color_name, found_at)
     return result
 end
 
+function adbDbGetItemsByName(color_name)
+    assert(color_name ~= nil)
+    adbDebug("adbDbGetItemsByName [" .. color_name .. "]", 2)
+    local sql = string.format("SELECT * FROM items WHERE colorName = %s;", adbSqlTextValue(color_name))
+    local result = {}
+    for row in adbDbNrowsExec(sql) do
+        table.insert(result, adbDbMakeItemFromRow(row))
+    end
+    return result
+end
+
 function trim(s)
     return s:gsub("^%s*(.-)%s*$", "%1")
 end
@@ -3768,6 +3829,9 @@ Added acmp command.
 Added error message when item's not found for aid command.
 1.037
 Sync cache before doing adb find.
+1.038
+Add external interface for AKM
+Add Temple2 goal items to ignore-list.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
@@ -3836,4 +3900,59 @@ function OnPluginSaveState()
     adbSaveOptions()
     adbDbSave()
     adbCacheSave()
+end
+
+------- Functions for external plugins -------
+
+-- returns string containing serialized array of matching item(s) from DB
+function ADB_GetItem(color_name)
+    adbDebug("ADBGetItem " .. color_name, 2)
+    local result = {}
+    if color_name == nil then
+        return serialize.save_simple(result)
+    end
+    return serialize.save_simple(adbCacheGetItemsByName(color_name))
+end
+
+-- Identifies item using <command>, calls provided <callback> function with
+-- serialized identify result when results are ready.
+-- Returns false on failure.
+function ADB_IdentifyItem(command, plugin, callback, ctx)
+    adbDebug("ADBIdentifyItem " .. command .. " from plugin " .. plugin, 2)
+    if command == nil then
+        return false
+    end
+
+    local id_ctx = {
+        plugin = plugin,
+        callback = callback,
+        ctx = ctx,
+    }
+    adbIdentifyItem(command, function(obj, ctx)
+        CallPlugin(ctx.plugin, ctx.callback, serialize.save_simple(obj), ctx.ctx)
+    end, id_ctx)
+
+    return true
+end
+
+-- Calls <plugin> <callback> when provided <filter> function
+-- returns "true" for a looted item.
+-- Note: adb auto actions are ignored for such items.
+-- Note: going to be called for non-bloot items only, yet.
+-- Returns false on failure.
+function ADB_RegisterLootFilter(filter, plugin, callback)
+    local func, err
+    func, err = loadstring(filter)
+    if func == nil then
+        adbInfo("Failed to compile loot filter: " .. err)
+        return false
+    end
+
+    adb_external_loot_filters["filter"] = {
+        func = func,
+        plugin = plugin,
+        callback = callback
+    }
+    adbInfo("Registered loot filter " .. callback .. " for plugin " .. plugin)
+    return true
 end
