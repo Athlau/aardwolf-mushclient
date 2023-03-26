@@ -65,6 +65,7 @@ end
 
 local akm_queue_draining = false
 function akmKeyringDataQueueDrain()
+    akmDebug("akmKeyringDataQueueDrain", 2)
     if #akm_keyring_data_queue == 0 then
         akm_queue_draining = false
         akmInfo("Done")
@@ -75,7 +76,8 @@ function akmKeyringDataQueueDrain()
         akm_state.keyring = {}
     end
     local ctx = {
-        key = akm_keyring_data_queue[1]
+        key = akm_keyring_data_queue[1],
+        retries = 0,
     }
     table.remove(akm_keyring_data_queue, 1)
     local rc, items = CallPlugin(adb_plugin_id, "ADB_GetItem", ctx.key.name)
@@ -92,17 +94,26 @@ function akmKeyringDataQueueDrain()
             })
             akmKeyringDataQueueDrain()
         else
-            local rc, result = CallPlugin(adb_plugin_id, "ADB_IdentifyItem", 
-                                            "keyring get " .. ctx.key.id .. "\n" ..
-                                            "id " .. ctx.key.id .. "\n" ..
-                                            "keyring put " .. ctx.key.id,
-                                            GetPluginID(), "akmIdentifyResultReadyCB", serialize.save_simple(ctx))
-            if rc ~= error_code.eOK or result ~= true then
-                akmErr("Failed to call ADB_GetItem " .. result)
+            if not akmIdentifyItemHelper(ctx) then
                 akmKeyringDataQueueDrain()
             end
         end
     end
+end
+
+function akmIdentifyItemHelper(ctx)
+    akmDebug("calling ADB_IdentifyItem", 2)
+    local rc, result
+    rc, result = CallPlugin(adb_plugin_id, "ADB_IdentifyItem",
+                                "keyring get " .. ctx.key.id .. "\n" ..
+                                "id " .. ctx.key.id .. "\n" ..
+                                "keyring put " .. ctx.key.id,
+                                GetPluginID(), "akmIdentifyResultReadyCB", serialize.save_simple(ctx))
+    if rc ~= error_code.eOK or result ~= true then
+        akmErr("Failed to call ADB_GetItem " .. result)
+        return false
+    end
+    return true
 end
 
 function akmIdentifyResultReadyCB(obj, ctx)
@@ -111,7 +122,16 @@ function akmIdentifyResultReadyCB(obj, ctx)
     local ctx = loadstring(string.format("return %s", ctx))()
 
     if obj.stats.id == nil or obj.stats.id ~= tonumber(ctx.key.id) then
-        akmErr("Failed to identify " .. ctx.key.id)
+        if ctx.retries < 1 then
+            akmDebug("Failed to identify " .. ctx.key.id .. " retrying.", 1)
+            ctx.retries = 1
+            if not akmIdentifyItemHelper(ctx) then
+                akmKeyringDataQueueDrain()
+            end
+            return
+        else
+            akmErr("Failed to identify " .. ctx.key.id)
+        end
     else
         table.insert(akm_state.keyring, {
             id = ctx.key.id,
@@ -131,8 +151,10 @@ function akmOnKeyLooted(id, bloot, item)
     
     for _, v in ipairs(akm_state.keyring) do
         if v.item.colorName == item.colorName then
-            if akm_options.get_rid_of_key_cmd ~= "" then
-                SendNoEcho(akm_options.get_rid_of_key_cmd .. " " .. tostring(id))
+            if not string.find(item.stats.flags, "melt%-drop") and not string.find("%flags", "nodrop") then
+                if akm_options.get_rid_of_key_cmd ~= "" then
+                    SendNoEcho(akm_options.get_rid_of_key_cmd .. " " .. tostring(id))
+                end
             end
             return
         end
@@ -286,6 +308,8 @@ local akm_help = {
 @MChangelog@w:
 1.001
 Initial drop.
+1.002
+Capture timed out id requests.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
@@ -348,7 +372,7 @@ function akmCheckClientVersion()
     end
 end
 
-local akm_min_adb_version = 1.038
+local akm_min_adb_version = 1.039
 function akmCheckADBVersion()
     if GetPluginInfo(adb_plugin_id, 19) == nil then
         akmErr("AKM requires ADB plugin!")

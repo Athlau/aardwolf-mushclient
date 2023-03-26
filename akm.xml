@@ -20,14 +20,21 @@
 <description trim="y">
 <![CDATA[
 @R---------------- AKM plugin loaded ----------------------------------------------
-@CThis is still early version and lots of things are in my todo list, including
-@Cadding more help details and examples.
-@wBla bla bla, add more text here
+This plugin manages looted keys and existing keys on your keyring.
+
+Automatically deduplicates existing keys on keyring.
+Puts freshly looted keys to the keyring if there's no such key yet.
+Drops duplicate looted keys on the ground unless they're melt-drop or cursed.
+--- Features below this line are not there yet ---
+Puts no-save keys to container before logout.
+Optionally puts keys without (keep) flag to container before logout.
+Puts "unkept" keys not used for areas in your Q/GQ/CP level range to container.
+Gets keys used for areas in your Q/GQ/CP level range from container.
 
 @w Type @Gakm help@w for more information.
 
-1.001
-Initial drop.
+1.002
+Capture timed out id requests.
 ]]>
 </description>
 </plugin>

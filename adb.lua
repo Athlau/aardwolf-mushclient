@@ -3832,6 +3832,8 @@ Sync cache before doing adb find.
 1.038
 Add external interface for AKM
 Add Temple2 goal items to ignore-list.
+1.039
+Add timeout check to adbIdentifyItem
 @R-----------------------------------------------------------------------------------------------
   ]]
 }

@@ -54,13 +54,18 @@ function adbIdentifyItem(command, ready_callback, context, draining_queue)
         identifyVersion = adb_id_version
     }
 
-    Capture.untagged_output(command, true, true, true, adbIdCapturedCB, false)
+    Capture.untagged_output(command, true, true, true, adbIdCapturedCB, false, adbIdCaptureTimeoutCB)
 end
 
 function adbIdCapturedCB(style_lines, start, line)
     for _, v in ipairs(style_lines) do
         adbOnItemIdStatsLine("", strip_colours(StylesToColours(v)), nil, v)
     end
+    adbIdItemIdEnd()
+end
+
+function adbIdCaptureTimeoutCB()
+    adbDebug("adbIdentifyItem request timed out", 0)
     adbIdItemIdEnd()
 end
 
