@@ -15,14 +15,19 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.039"
+   version="1.040"
    >
 <description trim="y">
 <![CDATA[
 @R---------------- ADB plugin loaded ----------------------------------------------
-@CThis is still early version and lots of things are in my todo list, including
-@Cadding more help details and examples.
-@wBla bla bla, add more text here
+@CThis is still early version and lots of things are in my todo list.
+@CBut most parts are working just fine now.
+
+@CI'm all open to contributions especially in cleaning up help topics and adding
+@Cmore examples there.
+
+@R    Plugin functionality is quite limited if you don't have
+                         @GIdentify Wish
 
 @R    It's required to enable server side invmon for this plugin to work!
 @w    Execute the following command to enable it:
@@ -31,10 +36,12 @@
 @w    Note: if you're using plugins like dinv then it's already enabled.
 @w    PS. I'm too lazy to write code which enables it :P
 
-@w Type @Gadb help@w for more information.
+@wType @Gadb help@w for more information.
 
-1.039
-Add timeout check to adbIdentifyItem
+1.040
+Added help for db fields used in 'adb find' and auto_actions.
+Added ADB_AddItem
+Added Transcendence zone short name.
 ]]>
 </description>
 

@@ -886,6 +886,7 @@ function adbReplacePatterns(cmd, id, bloot, name, colorName, base_item, lua)
     cmd = cmd:gsub("%%%f[%a]" .. "name" .. "%f[%A]", lua and adbMakeLuaString(name) or name)
     local cname = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(colorName) or colorName
     cmd = cmd:gsub("%%%f[%a]" .. "colorName" .. "%f[%A]", lua and adbMakeLuaString(cname) or cname)
+    cmd = cmd:gsub("%%%f[%a]" .. "zone" .. "%f[%A]", lua and adbMakeLuaString(base_item.location.zone) or base_item.location.zone)
 
     local gpp = base_item.stats.weight == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
     cmd = cmd:gsub("%%%f[%a]" .. "gpp" .. "%f[%A]", gpp)
@@ -2122,7 +2123,8 @@ adbAreaNameXref = {
     ["From The Society of Tanelorn"] = "tanelorn",
     ["From Vanir"] = "vanir",
     ["Fellchantry"] = "chantry",
-    ["Sea King's Dominion"] = "seaking"
+    ["Sea King's Dominion"] = "seaking",
+    ["Transcendence"] = "transcend",
 }
 
 ------  ACMP -------
@@ -3548,20 +3550,26 @@ Examples:
                           aliases here.
 
    For "normal" looted items you can use all of the item fields prefixed with % symbol
-   to get actual values for the given item. Those pretty much are the same as listed
-   in @G"dinv help query"@w. With an exception of @Gid@w field which is replaced by @G%item@w.
-   TODO: list fields
+   to get actual values for the currently looted item. See "@Gadb help fields@w" for a full list.
+   @WWith an @Rexception@W of @Gid@W field which is replaced by @G%item@W.
+
    There are few special fields available:
    @G%item@w - looted item ID.
    @G%bloot@w - bloot level of the item, 0 for "normal" loot.
    @G%gpp@w - item's gold per pound value, worth/weight (checked for division by 0).
-   @G%colorName@w - item's color name
+
+   With auto actions you can do all kind of things, depends on your level of scripts understanding.
+   To put all looted items into container one could go with simple
+   @Won_normal_looted_cmd@w set to @W"put %item bag"
+   More sophisticated approach might be to put keys onto keyring, drop cheap loot, put more expensive
+   items to bag. See default settings for some very minimal examples.
+   Note: check out new AKM plugin, which deals keys and keyring management.
 
    @mon_bloot_looted_lua@w and @mon_bloot_looted_cmd@w are the same as normal actions,
    but are only executed for bonus loot items. In other words %bloot is bigger than 0.
    @RNote@R: bonus loot items aren't automatically identified. Instead you will get
-   most field values from it's "base" counterpart if that's found in the DB. Except for
-   %item, %name, %colorName and %bloot which correspond to the actually looted item.
+   @Rmost field values from it's "base" counterpart if that's found in the DB. Except for
+   @G%item@R, @G%name@R, @G%colorName@R and @G%bloot@R which correspond to the actually looted item.
    Note: @RBloot actions with not be executed if base items isn't found in DB.@w
 
    I'm trying to decide if this usable or should there be an options to actually
@@ -3632,17 +3640,43 @@ Examples:
     ["find"] = [[
 @R-----------------------------------------------------------------------------------------------
 @Wadb find <query> [format.name]@w - search db using provided <query>.
-  The query should be formed following sqlite3 select rules.
-  Some examples:
-     adb find type='Weapon' and level>25 and level<30 ORDER BY avedam desc, level asc
-     adb find dam+hit>=50 format.full
+The query should be formed following sqlite3 select rules.
 
-  Note: field values are case sensitive. If you don't care you could do something like:
-    @Wadb find LOWER(name) like '%sword%'@w - which will match all items with names containing
-    sword, SWORD, SwOrD etc.
+@WSome examples:
 
-  To get list of fields available use "dinv help query" for now. It's almost the same.
-  TODO: list fields available and give more details here.
+@CFind all weapons between level 26 and 29, sort output first by average weapon damage descending,
+@Cthen by item level in the ascending order.
+@Wadb find type='Weapon' and level>25 and level<30 ORDER BY avedam desc, level asc
+  @B1. @D[@W17885@Ddb] a wicked shortsword [@C29@D lvl] [@Wwield@D] [@M46@Davg @Wsword steel Pierce @D] [@Y214@Dscore] [@G3@Ddr @G3@Dhr] [IR]
+  @B2. @D[@W12766@Ddb] @ga @ws@Wil@wv@Wer@g poignard @D[@C29@D lvl] [@Wwield@D] [@M43@Davg @Wdagger silver Pierce @D] [@Y187@Dscore] [@G2@Ddr @G1@Dhr] [IR]
+  @B3. @D[@W17664@Ddb] a Huge Club [@C29@D lvl] [@Wwield@D] [@M42@Davg @Wmace wood Bash @D] [@Y168@Dscore] [@G5@Ddr @R-5@Dhr] [IR]
+  @B4. @D[@W12518@Ddb] A wicked longsword [@C26@D lvl] [@Wwield@D] [@M40@Davg @Wsword steel Slash sharp@D] [@Y170@Dscore] [@Y1@Dstats] [@G1@Dstr] [IR]
+
+@CFind all items with sum of DamRoll and HitRoll greater than 49, use format.full to display results.
+@Wadb find dam+hit>=50 format.full
+  @B1. @D[@W1906@Ddb] [@W2797061957@D] @WA@wsh @D[@C181@D lvl] [@WWeapon@D] [@Wwield@D] [@M420@Davg @Wsword ash Negative vampiric@D] [@Y1930@Dscore] [@G25@Ddr @G25@Dhr] [@G200@Dhp@D @R-300@Dmn] [@W22@Dwgt] [@W4000@Dg]
+  @x244 @D[@Wglow, hum, evil, magic, anti-good, anti-neutral, noremove, V3@D] [@WThe Mountains of Desolation@D]
+  @x201 Keywords: @D[@Wash sword grey evil@D]
+  @M Looted from:
+  @W King Mendan@D [@Wdesolation@D] Room(s) [@W19627@D]
+
+@CFind level 41 items which are sold by shopkeepers, could be worn on wrist and are enchantable.
+@Wadb find level=41 and shop=1 and wearable='wrist' and (flags like '%invis%' or not flags like '%hum%' or not flags like '%glow%')
+  @B1. @D[@W8001@Ddb] A @Cglow-in-the-dark @wWrist @YSundial @D[@C41@D lvl] [@Wwrist@D] [@Y40@Dscore] [@G3@Ddr @G1@Dhr] [@Y2@Dstats] [@G2@Dint] [@G2@DallPh @G2@DallMg] [SR]
+  @B2. @D[@W13795@Ddb] @YGolden Bracers @wof @MBalboa @D[@C41@D lvl] [@Wwrist@D] [@Y35@Dscore] [@G3@Ddr] [@Y2@Dstats] [@G2@Ddex] [@G2@DallPh @G2@DallMg] [SR]
+
+@CFind level 41 items which are sold by shopkeepers and are enchantable, order by wear location.
+@Wadb find level=41 and shop=1 and (flags like '%invis%' or not flags like '%hum%' or not flags like '%glow%') order by wearable
+  @B1. @D[@W8029@Ddb] @WS@wc@Wriven@wer'@Ws @y((!@MMight@y!)) @D[@C41@D lvl] [@Warms@D] [@Y60@Dscore] [@G4@Ddr] [@Y4@Dstats] [@G2@Dstr @G2@Ddex] [@G2@DallPh @G1@DallMg] [SR]
+  @B2. @D[@W12623@Ddb] @WS@wu@Wb@wl@Wi@wm@We @wB@Wr@wa@Wc@we@Wr@ws @Wo@wf @WV@we@Wn@wg@We@wa@Wn@wc@We @D[@C41@D lvl] [@Warms@D] [@Y60@Dscore] [@G4@Ddr] [@Y4@Dstats] [@G2@Ddex @G2@Dcon] [@G2@DallPh @G2@DallMg] [IR]
+  @B3. @D[@W13767@Ddb] a large @YSandstone @MBlock @D[@C41@D lvl] [@Wback@D] [@Y60@Dscore] [@G4@Ddr] [@Y4@Dstats] [@G4@Dstr] [@G2@DallPh @G2@DallMg] [SR]
+  @B4. @D[@W8032@Ddb] A @MMaroon Apron@w with a @m<<@y|@wGaardBucks@y|@m>> @MLogo @D[@C41@D lvl] [@Wbody@D] [@Y60@Dscore] [@G4@Ddr] [@Y4@Dstats] [@G4@Dint] [@G2@DallPh @G2@DallMg] [SR]
+
+@RNote@w: field values are case sensitive. If you don't care you could do something like:
+  @Wadb find LOWER(name) like '%sword%'@w - which will match all items with names containing
+  sword, SWORD, SwOrD etc.
+
+See "@Gadb help fields@w" for a list of available fields.
 @R-----------------------------------------------------------------------------------------------
   ]],
     ["aide"] = [[
@@ -3718,6 +3752,11 @@ Item's location will be set to current zone and a special "shopkeeper" mob with 
 If @Gall@w is specified this command will also identify and add all base items sold by store to DB with unknown
 location which will be automatically updated if you find a mob dropping this item.
 @R-----------------------------------------------------------------------------------------------
+  ]],
+    ["fields"] = [[
+@R-----------------------------------------------------------------------------------------------
+@WADB shares lots of field names with the ones in DINV plugin (listed below after specific fields).
+@RNote@W: field names are @RCase SeNsItIvE@W and should be prefixed with @G%@W if used in auto actions.
   ]],
     ["changelog"] = [[
 @R-----------------------------------------------------------------------------------------------
@@ -3834,9 +3873,94 @@ Add external interface for AKM
 Add Temple2 goal items to ignore-list.
 1.039
 Add timeout check to adbIdentifyItem
+1.040
+Added help for db fields used in 'adb find' and auto_actions.
+Added ADB_AddItem
+Added Transcendence zone short name.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
+
+local adb_ignore_dinv_fields = {
+    ["organize"] = true,
+    ["loc"] = true,
+    ["rloc"] = true,
+    ["key"] = true,
+    ["keyword"] = true,
+    ["rlocation"] = true,
+    ["rname"] = true,
+}
+
+local adb_fields = {
+    ["dbid"] = {
+        name = "dbid",
+        desc = "Unique database row id for item.",
+    },
+    ["colorName"] = {
+        name = "colorName",
+        desc = "Item name including aardwolf color codes.",
+    },
+    ["zone"] = {
+        name = "zone",
+        desc = "Shorname for a zone item is looted from.",
+    },
+    ["comment"] = {
+        name = "comment",
+        desc = "User entered comments for the item."
+    },
+    ["identifyLevel"] = {
+        name = "identifyLevel",
+        desc = "\"@Gfull@W\" for items identified with \"@Gidentify wish@W\". Other modes aren't supported much as of now.",
+    },
+    ["spellsXlevel"] = {
+        name = "spellsXlevel",
+        desc = "Level of the spell number X cast by item. Use as spells1level .. spells5level.",
+    },
+    ["spellsXname"] = {
+        name = "spellsXname",
+        desc = "Name of the spell number X cast by item. Use as spells1name .. spells5name.",
+    },
+    ["spellsXcount"] = {
+        name = "spellsXcount",
+        desc = "Count of spellcasts of the spell number X cast by item. Use as spells1count .. spells5count."
+    },
+    ["skillMods"] = {
+        name = "skillMods",
+        desc = "Skill mods applied by item."
+    },
+    ["identifyVersion"] = {
+        name = "identifyVersion",
+        desc = "Version of identify module used when item was added to DB. Items with old version will be utomatically updated when seen again."
+    },
+    ["shop"] = {
+        name = "shop",
+        desc = "\"1\" if unlimited amount of item is sold by a shopkeeper."
+    }
+}
+
+function adbPrintFields(tbl)
+    local keys = {}
+    table.foreach(tbl, function(k, v)
+        table.insert(keys, k)
+    end)
+    table.sort(keys, function(key1, key2)
+        return tbl[key1].name < tbl[key2].name
+    end)
+
+    for i = 1, #keys, 1 do
+        if not adb_ignore_dinv_fields[tbl[keys[i]].name] then
+            AnsiNote(ColoursToANSI(string.format("@C%15s@W: %s", tbl[keys[i]].name, tbl[keys[i]].desc)))
+        end
+    end
+end
+
+function adbHelpFields()
+    AnsiNote(ColoursToANSI("@W------ ADB specific fields ------\n"))
+    adbPrintFields(adb_fields)
+    AnsiNote(ColoursToANSI("\n@W------ Fields common with DINV ------\n"))
+    adbPrintFields(inv.stats)
+    AnsiNote(ColoursToANSI("@R-----------------------------------------------------------------------------------------------"))
+end
 
 function adbOnHelp(name, line, wildcards)
     if wildcards == nil or not adb_help[wildcards.topic] then
@@ -3852,12 +3976,24 @@ function adbOnHelp(name, line, wildcards)
 @WAvailable help topics:@w]]
         adbInfo("Running ADB version: " .. tostring(GetPluginInfo(world.GetPluginID(), 19)))
         AnsiNote(ColoursToANSI(message))
-        for k, _ in pairs(adb_help) do
-            AnsiNote(ColoursToANSI("@Gadb help " .. k .. "@w"))
+        local keys = {}
+        table.foreach(adb_help, function(k, v)
+            table.insert(keys, k)
+        end)
+        table.sort(keys, function(key1, key2)
+            return key1 < key2
+        end)
+
+        for i = 1, #keys, 1 do
+            AnsiNote(ColoursToANSI("@Gadb help " .. keys[i] .. "@w"))
         end
         AnsiNote("")
     else
         AnsiNote(ColoursToANSI(adb_help[wildcards.topic]))
+
+        if wildcards.topic == "fields" then
+            adbHelpFields()
+        end
     end
 end
 
@@ -3904,6 +4040,11 @@ function OnPluginSaveState()
     adbCacheSave()
 end
 
+-- Some item names in the game have extra(erroneous) color codes which appear in the inv/keyring data
+-- but can't be captured in the identify output.
+local color_names_fixup = {
+    ["@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of @rf@Rl@Ya@ym@Re@r@Ys@y)"] = "@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of f@Rl@Ya@ym@Re@Ys@y)",
+}
 ------- Functions for external plugins -------
 
 -- returns string containing serialized array of matching item(s) from DB
@@ -3913,6 +4054,8 @@ function ADB_GetItem(color_name)
     if color_name == nil then
         return serialize.save_simple(result)
     end
+    color_name = color_names_fixup[color_name] ~= nil and
+                 color_names_fixup[color_name] or color_name
     return serialize.save_simple(adbCacheGetItemsByName(color_name))
 end
 
@@ -3934,6 +4077,25 @@ function ADB_IdentifyItem(command, plugin, callback, ctx)
         CallPlugin(ctx.plugin, ctx.callback, serialize.save_simple(obj), ctx.ctx)
     end, id_ctx)
 
+    return true
+end
+
+-- Adds given non bloot item to DB
+function ADB_AddItem(item)
+    adbDebug("ADBAddItem " .. item, 2)
+    local item = loadstring(string.format("return %s", item))()
+    if item == nil or item.stats == nil or item.stats.name == nil or item.colorName == nil or
+       item.stats.foundat == nil or adbGetBlootLevel(item.stats.name) > 0 then
+        return false
+    end
+    item.location = item.location == nil and {} or item.location
+    item.location.mobs = item.location.mobs == nil and {} or item.location.mobs
+    item.location.zone = item.location.zone == nil and adbAreaNameXref[item.stats.foundat] or item.location.zone
+    if item.location.zone == nil then
+        adbErr("Don't know short zone name for " .. item.stats.foundat)
+        return false
+    end
+    adbCacheAdd(item)
     return true
 end
 
