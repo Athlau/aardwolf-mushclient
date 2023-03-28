@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-03-15 15:14:32"
    requires="5.07"
-   version="1.001"
+   version="1.003"
    >
 <description trim="y">
 <![CDATA[
@@ -33,8 +33,8 @@ Gets keys used for areas in your Q/GQ/CP level range from container.
 
 @w Type @Gakm help@w for more information.
 
-1.002
-Capture timed out id requests.
+1.003
+Add existing keys to DB if needed.
 ]]>
 </description>
 </plugin>

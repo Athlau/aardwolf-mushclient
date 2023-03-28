@@ -48,6 +48,7 @@ function akmKeyringDataReadyCB(style_lines)
         local id, flags, name, level
         _, _, id, flags, name, level = line:find("^(%d+),(.*),(.*),(.*),.*,.*,.*,.*$")
         if id ~= nil then
+            name = name:gsub("^@w", ""):gsub("@w$", "")
             table.insert(akm_keyring_data_queue, {
                 id = id,
                 flags = flags,
@@ -133,10 +134,14 @@ function akmIdentifyResultReadyCB(obj, ctx)
             akmErr("Failed to identify " .. ctx.key.id)
         end
     else
+        if ctx.key.name ~= obj.colorName then
+            akmErr("Identified name [" .. obj.colorName .. "] doesn't match keyring data name [" .. ctx.key.name .. "]")
+        end
         table.insert(akm_state.keyring, {
             id = ctx.key.id,
             item = obj,
         })
+        CallPlugin(adb_plugin_id, "ADB_AddItem", serialize.save_simple(obj))
     end
 
     akmKeyringDataQueueDrain()
@@ -310,6 +315,8 @@ local akm_help = {
 Initial drop.
 1.002
 Capture timed out id requests.
+1.003
+Add existing keys to DB if needed.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
@@ -372,7 +379,7 @@ function akmCheckClientVersion()
     end
 end
 
-local akm_min_adb_version = 1.039
+local akm_min_adb_version = 1.040
 function akmCheckADBVersion()
     if GetPluginInfo(adb_plugin_id, 19) == nil then
         akmErr("AKM requires ADB plugin!")
