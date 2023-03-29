@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2022-12-15 22:33:17"
    requires="5.07"
-   version="1.0"
+   version="1.01"
    >
 <description trim="y">
 <![CDATA[
@@ -413,6 +413,7 @@ require "themed_miniwindows"
 require "tprint"
 require "copytable"
 require "wait"
+require "gmcphelper"
 dofile(GetInfo(60) .. "aardwolf_colors.lua")
 
 local tc_options = {}
@@ -1176,6 +1177,22 @@ You see lightning strike room a9!
 end
 
 ------ Plugin Callbacks ------
+local was_in_control_room = nil
+function OnPluginBroadcast(msg, id, name, text)
+  if (id == '3e7dedbe37e44942dd46d264') then
+    if text == "room.info" then
+      local in_control_room = gmcp("room.info.zone") == "transcend" and gmcp("room.info.num") == "47838"
+      if in_control_room ~= was_in_control_room then
+        was_in_control_room = in_control_room
+        if in_control_room then
+          tcOnOnCmd()
+        else
+          tcOnOffCmd()
+        end
+      end
+    end
+  end
+end
 
 function tcOnHelp()
   world.Note(world.GetPluginInfo(world.GetPluginID(), 3))
@@ -1188,7 +1205,6 @@ end
 
 function OnPluginEnable()
   tcLoadOptions()
-  tcShowWindow()
 end
 
 function OnPluginConnect()
