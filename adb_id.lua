@@ -65,7 +65,7 @@ function adbIdCapturedCB(style_lines, start, line)
 end
 
 function adbIdCaptureTimeoutCB()
-    adbDebug("adbIdentifyItem request timed out", 0)
+    adbDebug("adbIdentifyItem request timed out", 1)
     adbIdItemIdEnd()
 end
 
