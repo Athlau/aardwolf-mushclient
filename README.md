@@ -15,7 +15,7 @@ See **adb help** for details.
 *******************************************
 
 *******************************************
-**!!! Most of the functionality required IDENTIFY WISH !!!**
+**!!! Most of the functionality requires IDENTIFY WISH !!!**
 *******************************************
 
 Some screenshots:
