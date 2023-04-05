@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.040"
+   version="1.041"
    >
 <description trim="y">
 <![CDATA[
@@ -38,10 +38,11 @@
 
 @wType @Gadb help@w for more information.
 
-1.040
-Added help for db fields used in 'adb find' and auto_actions.
-Added ADB_AddItem
-Added Transcendence zone short name.
+1.041
+Added aench command.
+Compacted output for aide command.
+Fixed bloot order for Fabled = 18, Mythical = 19.
+Removed error message on rare loot queue desync.
 ]]>
 </description>
 
@@ -138,6 +139,37 @@ Added Transcendence zone short name.
    sequence="100"
   >
   </alias>
+
+  <alias
+   script="adbOnAENCHCommand"
+   match="^aench(?:| container\.(?<container>\d+)| (?<item>[^\s]+))?(?<enchants>(?: [SIR](?:\d+)?)+)(?: (?<any>any))?(?: (?<nofocus>nofocus))?(?: (?<format>format\..+?))?(?: fail\.(?<failcommand>.+?))??(?: pass\.(?<passcommand>.+?))?$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="100"
+  >
+  </alias>
+
+  <alias
+   script="adbAenchResume"
+   match="^aench resume$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="90"
+  >
+  </alias>
+
+  <alias
+   script="adbAenchAbort"
+   match="^aench abort$"
+   regexp="y"
+   enabled="y"
+   send_to="12"
+   sequence="90"
+  >
+  </alias>
+
   <alias
    script="adbOnAdbDebugDump"
    match="^adb_debug_dump$"

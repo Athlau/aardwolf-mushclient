@@ -4,6 +4,7 @@ require "serialize"
 require "gmcphelper"
 require "wait"
 require "wrapped_captures"
+require "string"
 dofile(GetPluginInfo(GetPluginID(), 20) .. "adb_id.lua")
 
 local adb_state = {
@@ -13,8 +14,7 @@ local adb_state = {
     ignore_aucto_actions_for_items = {}
 }
 
-local adb_external_loot_filters = {
-}
+local adb_external_loot_filters = {}
 
 local adb_options = {}
 
@@ -886,7 +886,8 @@ function adbReplacePatterns(cmd, id, bloot, name, colorName, base_item, lua)
     cmd = cmd:gsub("%%%f[%a]" .. "name" .. "%f[%A]", lua and adbMakeLuaString(name) or name)
     local cname = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(colorName) or colorName
     cmd = cmd:gsub("%%%f[%a]" .. "colorName" .. "%f[%A]", lua and adbMakeLuaString(cname) or cname)
-    cmd = cmd:gsub("%%%f[%a]" .. "zone" .. "%f[%A]", lua and adbMakeLuaString(base_item.location.zone) or base_item.location.zone)
+    cmd = cmd:gsub("%%%f[%a]" .. "zone" .. "%f[%A]",
+        lua and adbMakeLuaString(base_item.location.zone) or base_item.location.zone)
 
     local gpp = base_item.stats.weight == 0 and 99999999 or (base_item.stats.worth / base_item.stats.weight)
     cmd = cmd:gsub("%%%f[%a]" .. "gpp" .. "%f[%A]", gpp)
@@ -1529,7 +1530,9 @@ function adbProcessIdResults(obj, ctx)
     end
 end
 
-local adb_inv_data_queue = nil
+------ aide command ------
+
+local adb_aide_inv_data_queue = nil
 local adb_aide_busy = false
 local adb_aide_ctx = nil
 function adbOnAIDECommand(name, line, wildcards)
@@ -1556,9 +1559,10 @@ function adbOnAIDECommand(name, line, wildcards)
         IR = wildcards.IR,
         removable = wildcards.removable == "removable",
         enchanted = wildcards.enchanted == "enchanted",
-        command = wildcards.command
+        command = wildcards.command,
+        compact_ctx = adbCompactMakeCtx(),
     }
-    adb_inv_data_queue = {}
+    adb_aide_inv_data_queue = {}
 
     local add_id = (wildcards.id ~= "" and (" " .. wildcards.id) or "")
 
@@ -1571,11 +1575,13 @@ function adbOnAIDECommand(name, line, wildcards)
             sendto.scriptafteromit, 0);
     end
 
+    adbCompact(true, adb_aide_ctx.compact_ctx)
     Capture.tagged_output("invdata" .. add_id, "{invdata" .. add_id .. "}", "{/invdata}", false, true, true, true,
         adbInvDataReadyCB, false)
 end
 
 function adbInvDataNotFoundCB()
+    adbCompact(false, adb_aide_ctx.compact_ctx)
     adbInfo("AIDE container " .. adb_aide_ctx.bagid .. " not found.")
     adb_aide_busy = false
 end
@@ -1587,23 +1593,24 @@ function adbInvDataReadyCB(style_lines)
         local id
         _, _, id = line:find("^(%d+),.*,.*,.*,.*,.*,.*,.*$")
         if id ~= nil then
-            table.insert(adb_inv_data_queue, id)
+            table.insert(adb_aide_inv_data_queue, id)
         else
             adbErr("Can't find ID in invdata line " .. line)
         end
     end
-    adbInfo("AIDE processing " .. #adb_inv_data_queue .. " items(s).")
+    adbInfo("AIDE processing " .. #adb_aide_inv_data_queue .. " items(s).")
     adbInvDataQueueDrain()
 end
 
 function adbInvDataQueueDrain()
-    if #adb_inv_data_queue == 0 then
+    if #adb_aide_inv_data_queue == 0 then
+        adbCompact(false, adb_aide_ctx.compact_ctx)
         adb_aide_busy = false
         adbInfo("AIDE finished.")
         return
     end
 
-    local item_id = table.remove(adb_inv_data_queue, 1)
+    local item_id = table.remove(adb_aide_inv_data_queue, 1)
     local cmd = "id " .. item_id
     if adb_aide_ctx.bagid ~= "" then
         cmd = "get " .. item_id .. " " .. adb_aide_ctx.bagid .. "\n" .. cmd .. "\nput " .. item_id .. " " ..
@@ -1657,8 +1664,777 @@ function adbInvDataDrainIdentifyReadyCB(obj, ctx)
             end
             Execute(command)
         end
+        Note("")
     end
     adbInvDataQueueDrain()
+end
+
+------ aench command ------
+local adb_aench_inv_data_queue = nil
+local adb_aench_busy = false
+local adb_aench_ctx = nil
+local adb_aench_gag_output = true
+local adb_aench_noecho = true
+
+-- aench container.2682741121 S8 S8 I7 I7 R4 R4 fail.dropsac
+function adbOnAENCHCommand(name, line, wildcards)
+    adbDebugTprint(wildcards, 2)
+    if adb_aench_busy then
+        adbInfo("AENCH is already running, please retry when current operation finishes.")
+        return
+    end
+    adb_aench_busy = true
+    adbInfo(line)
+
+    if wildcards.format ~= "" and adb_options[wildcards.format] == nil then
+        adbInfo("Unknown format " .. wildcards.format .. " using default")
+    end
+    local identify_format = adb_options[wildcards.format] and adb_options[wildcards.format] or
+                                adb_options[adb_options.cockpit.aide_format]
+
+    adb_aench_ctx = {
+        fomat = identify_format,
+        container = wildcards.container,
+        item = wildcards.item,
+        enchants = {},
+        fail = wildcards.failcommand,
+        pass = wildcards.passcommand,
+        nofocus = wildcards.nofocus,
+        any = wildcards.any,
+        items_queue = {},
+        any_skips = {},
+        item_index = 0,
+        enchant_index = 0,
+        current_enchants = {},
+        current_obj = nil,
+        stats = {
+            Solidify = {},
+            Illuminate = {},
+            Resonate = {},
+            pass = 0,
+            fail = 0,
+            counts = {
+                Solidify = 0,
+                Illuminate = 0,
+                Resonate = 0,
+                Disenchant = 0,
+                Identify = 0
+            }
+        },
+        compact_ctx = adbCompactMakeCtx(),
+    }
+
+    local count = 0
+    local enchants = wildcards.enchants
+    while enchants ~= "" do
+        count = count + 1
+        local enchant, value
+        _, _, enchant, value = enchants:find("^ ([SIR])(%d+)")
+        if enchant ~= nil then
+            enchants = enchants:gsub("^ [SIR]%d+", "")
+            value = tonumber(value)
+        else
+            _, _, enchant = enchants:find("^ ([SIR])")
+            if enchant == nil then
+                adbErr("Failed to parse " .. enchants)
+                adbAenchFinish()
+                return
+            end
+            enchants = enchants:gsub("^ [SIR]", "")
+            value = 0
+        end
+        table.insert(adb_aench_ctx.enchants, {
+            enchant = adbEnchantShortNameToFull(enchant),
+            value = value
+        })
+        if count > 100 then
+            adbErr("Something is off parsing " .. wildcards.enchants)
+            adbAenchFinish()
+            return
+        end
+    end
+
+    adbCompact(true, adb_aench_ctx.compact_ctx)
+
+    if adb_aench_ctx.nofocus == "nofocus" then
+        adbAenchGatherItemsList()
+        return
+    end
+
+    adb_aench_ctx.step = "Checking enchanters focus"
+    Capture.untagged_output("affects 'Enchanters focus'", adb_aench_noecho, adb_aench_gag_output, true,
+        adbAenchCheckFocusCB, false, adbAenchTimeoutCB)
+end
+
+function adbEnchantShortNameToFull(name)
+    for k, v in pairs(adb_enchants) do
+        if k ~= "order" and v == name then
+            return k
+        end
+    end
+    adbErr("Can't guess enchant name for " .. name)
+    return nil
+end
+
+function adbAenchTimeoutCB()
+    adbInfo("AENCH timed out at: " .. adb_aench_ctx.step)
+    adbDebugTprint(adb_aench_ctx, 2)
+    adbAenchFinish()
+end
+
+function adbAenchGetStatsString(tbl, k1, k2)
+    local min, max, sum
+    sum = 0
+
+    for k, v in pairs(tbl) do
+        v = v[k1]
+        if type(v) == "table" then
+            v = v[k2]
+        end
+        sum = sum + adbGetStatNumberSafe(v)
+        min = (min == nil or min > adbGetStatNumberSafe(v)) and adbGetStatNumberSafe(v) or min
+        max = (max == nil or max < adbGetStatNumberSafe(v)) and adbGetStatNumberSafe(v) or max
+    end
+
+    if sum == 0 then
+        return ""
+    else
+        return string.format("@W%4.2f @Cavg @R%d @Cmin @G%d @Cmax", sum / #tbl, min, max)
+    end
+end
+
+function adbAenchGetEnchantReport(e)
+    local report = ""
+
+    if #e == 0 then
+        return report
+    end
+
+    report = adbAenchGetStatsString(e, "sum")
+    if report ~= "" then
+        report = string.format("\n@W%11s: %s", "TOTAL", report)
+    end
+    -- todo sort
+    for _, v in pairs(adb_enchant_stats) do
+        local line = adbAenchGetStatsString(e, "ench", v)
+        if line ~= "" then
+            report = string.format("%s\n@W%11s: %s", report, v:upper(), line)
+        end
+    end
+    return report
+end
+
+function adbAenchReportStats()
+    adbInfo("------------------------------ AENCH ------------------------------")
+    AnsiNote(ColoursToANSI(string.format("@CProcessed @W%d @Citems, @G%d@C successfully.",
+        adb_aench_ctx.stats.pass + adb_aench_ctx.stats.fail, adb_aench_ctx.stats.pass)))
+    AnsiNote(ColoursToANSI(string.format("@CDisenchanted @W%d @Ctime(s), identified @W%d @Ctimes(s).",
+        adb_aench_ctx.stats.counts.Disenchant, adb_aench_ctx.stats.counts.Identify)))
+    AnsiNote(ColoursToANSI(string.format("@CSolidified @W%d @Ctime(s):%s", adb_aench_ctx.stats.counts.Solidify,
+        adbAenchGetEnchantReport(adb_aench_ctx.stats.Solidify))))
+    AnsiNote(ColoursToANSI(string.format("@CIlluminated @W%d @Ctime(s):%s", adb_aench_ctx.stats.counts.Illuminate,
+        adbAenchGetEnchantReport(adb_aench_ctx.stats.Illuminate))))
+    AnsiNote(ColoursToANSI(string.format("@CResonated @W%d @Ctime(s):%s", adb_aench_ctx.stats.counts.Resonate,
+        adbAenchGetEnchantReport(adb_aench_ctx.stats.Resonate))))
+end
+
+function adbAenchFinish()
+    adbCompact(false, adb_aench_ctx.compact_ctx)
+    adbAenchReportStats()
+    adb_aench_busy = false
+    adbInfo("aench command finished")
+end
+
+function adbAenchCheckFocusFalling()
+    if adb_aench_ctx.focus ~= nil and adb_aench_ctx.focus.falls - os.time() < 20 then
+        adbInfo("AENCH Enchanters focus is fading soon! Aboring! (add nofocus if you don't care)")
+        adbAenchFinish()
+        return false
+    end
+    return true
+end
+
+function adbAenchCheckFocusCB(style_lines)
+    adbDebug("adbAenchCheckFocusCB", 2)
+    for _, v in ipairs(style_lines) do
+        local color_line = StylesToColours(v)
+        local line = strip_colours(color_line)
+
+        if line == "You are not affected by any skills or spells." then
+            adbInfo("AENCH Enchanters focus isn't up! Aborting! (add nofocus if you don't care)")
+            adbAenchFinish()
+            return
+        end
+
+        local pct, min, sec
+        _, _, pct, min, sec = line:find("^%s+Enchanters focus%s+: (%d+)%% enchanters focus %((%d+):(%d+)%)$")
+        if pct ~= nil then
+            adb_aench_ctx.focus = {
+                pct = tonumber(pct),
+                duration = tonumber(min) * 60 + tonumber(sec)
+            }
+            adb_aench_ctx.focus.falls = os.time() + adb_aench_ctx.focus.duration
+            break
+        end
+    end
+
+    if adb_aench_ctx.focus == nil then
+        adbErr("AENCH failed to process affects.");
+        adbAenchFinish()
+        return
+    end
+
+    if adb_aench_ctx.focus.pct < 100 then
+        adbInfo("AENCH Enchanters focus is only " .. tostring(adb_aench_ctx.focus.pct) ..
+                    "%! Aborting! (add nofocus if you don't care)")
+        adbAenchFinish()
+        return
+    end
+
+    if not adbAenchCheckFocusFalling() then
+        return
+    end
+
+    adbAenchGatherItemsList()
+end
+
+function adbAenchGatherItemsList()
+    adbDebug("adbAenchGatherItemsList", 2)
+    adb_aench_ctx.step = "Gathering invdata"
+
+    local command = "invdata"
+    if adb_aench_ctx.item ~= "" then
+        adb_aench_ctx.stats.counts.Identify = adb_aench_ctx.stats.counts.Identify + 1
+        adbIdentifyItem("id " .. adb_aench_ctx.item, adbAenchSingleItemIdReadyCB)
+        return
+    elseif adb_aench_ctx.container ~= "" then
+        if tonumber(adb_aench_ctx.container) ~= nil then
+            command = "invdata " .. adb_aench_ctx.container
+        else
+            adbErr("Shouldn't get here")
+            adbAenchFinish()
+            return
+        end
+    end
+
+    Capture.untagged_output(command, adb_aench_noecho, adb_aench_gag_output, true, adbAenchCheckInvdata, false,
+        adbAenchTimeoutCB)
+end
+
+function adbAenchSingleItemIdReadyCB(obj)
+    if obj.stats.id == nil then
+        adbInfo("Item " .. adb_aench_ctx.item .. " not found!")
+        adbAenchFinish()
+        return
+    end
+
+    local all_passed = true
+    local any_passed = false
+    local any_skips = {}
+
+    for _, e in ipairs(adb_aench_ctx.enchants) do
+        if not adbCanEnchant(obj, e.enchant) then
+            all_passed = false
+            if adb_aench_ctx.any == "any" then
+                any_skips[e.enchant] = 0
+            else
+                break
+            end
+        else
+            any_passed = true
+        end
+    end
+
+    if not all_passed and not (adb_aench_ctx.any == "any" and any_passed) then
+        AnsiNote(ColoursToANSI("@CAENCH: can't do requested enchants on " .. adbGetItemIdAndNameString(obj)))
+        if obj.stats.type == "Container" then
+            adbInfo("Use container." .. obj.stats.id .. " if you want to enchants items inside it.")
+        end
+        adbAenchFinish()
+        return
+    end
+
+    table.insert(adb_aench_ctx.items_queue, {
+        id = obj.stats.id,
+        colorName = obj.colorName
+    })
+    table.insert(adb_aench_ctx.any_skips, any_skips)
+    adbAenchDrainQueue()
+end
+
+function adbAenchCheckInvdata(style_lines)
+    adbDebug("adbAenchCheckInvdata", 2)
+
+    if #style_lines == 1 and #style_lines[1] == 1 and style_lines[1][1].text:match("^Item %d+ not found.$") then
+        adbInfo("Container " .. adb_aench_ctx.container .. " not found")
+        adbAenchFinish()
+        return
+    end
+
+    for _, v in ipairs(style_lines) do
+        local line = strip_colours(StylesToColours(v))
+        local id, flags, name
+        _, _, id, flags, name = line:find("^(%d+),(%a*),(.*),.*,.*,.*,.*,.*$")
+        if id ~= nil then
+            local enchant_checks = {
+                Solidify = {
+                    flag = "I",
+                    present = true
+                },
+                Illuminate = {
+                    flag = "G",
+                    present = false
+                },
+                Resonate = {
+                    flag = "H",
+                    present = false
+                }
+            }
+            local all_enchantable = true
+            local any_enchantable = false
+            local any_skips = {}
+
+            for _, e in ipairs(adb_aench_ctx.enchants) do
+                assert(enchant_checks[e.enchant] ~= nil)
+                if not ((flags:match(enchant_checks[e.enchant].flag) ~= nil) == enchant_checks[e.enchant].present) then
+                    all_enchantable = false
+                    if adb_aench_ctx.any == "any" then
+                        any_skips[e.enchant] = 0
+                    else
+                        break
+                    end
+                else
+                    any_enchantable = true
+                end
+            end
+            if all_enchantable or (adb_aench_ctx.any == "any" and any_enchantable) then
+                table.insert(adb_aench_ctx.items_queue, {
+                    id = id,
+                    colorName = name
+                })
+                table.insert(adb_aench_ctx.any_skips, any_skips)
+            end
+        end
+    end
+
+    if #adb_aench_ctx.items_queue > 20 then
+        adbInfo("You have " .. #adb_aench_ctx.items_queue .. " matching items, doing only 20 see help enchantbot")
+        while #adb_aench_ctx.items_queue > 20 do
+            table.remove(adb_aench_ctx.items_queue, 21)
+        end
+    end
+
+    adbAenchDrainQueue()
+end
+
+function adbAenchDrainQueue()
+    adbDebug("adbAenchDrainQueue", 2)
+    adb_aench_ctx.step = "Draining queue"
+
+    if #adb_aench_ctx.items_queue == 0 then
+        adbInfo("Can't enchant any items in " ..
+                    (adb_aench_ctx.container ~= "" and adb_aench_ctx.container or "inventory"))
+        adbAenchFinish()
+        return
+    end
+
+    adb_aench_ctx.item_index = 1
+    adb_aench_ctx.enchant_index = 1
+    adb_aench_ctx.current_obj = nil
+    adb_aench_ctx.current_enchants = {}
+    adbAenchDrainOne()
+end
+
+function adbCompactMakeCtx()
+    return {
+        compact_mode = gmcp("config.compact"),
+        prompt_mode = gmcp("config.prompt"),
+    }
+end
+
+function adbCompact(on, ctx)
+    if ctx.compact_mode == "NO" then
+        local set = on and "YES" or "NO"
+        Send_GMCP_Packet("config compact " .. set)
+        CallPlugin("3e7dedbe37e44942dd46d264" , "OnPluginTelnetSubnegotiation",
+                   201, "config { \"compact\" : \"" .. set .. "\" }")
+    end
+
+    if ctx.prompt_mode == "YES" then
+        local set = on and "NO" or "YES"
+        Send_GMCP_Packet("config prompt " .. set)
+        CallPlugin("3e7dedbe37e44942dd46d264" , "OnPluginTelnetSubnegotiation",
+                   201, "config { \"prompt\" : \"" .. set .. "\" }")
+    end
+end
+
+function adbAenchOnItemDone(result)
+    local item = adb_aench_ctx.items_queue[adb_aench_ctx.item_index]
+    if result == "pass" then
+        adb_aench_ctx.stats.pass = adb_aench_ctx.stats.pass + 1
+        if adb_aench_ctx.current_obj ~= nil then
+            adbProcessIdResults(adb_aench_ctx.current_obj, {
+                id = adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id,
+                format = adb_aench_ctx.fomat,
+                bagid = adb_aench_ctx.container,
+                channel = "",
+            })
+        else
+            AnsiNote(
+                ColoursToANSI(string.format("@CAENCH PASS: %s", adbCombineIdAndNameString(item.id, item.colorName))))
+        end
+    else
+        adb_aench_ctx.stats.fail = adb_aench_ctx.stats.fail + 1
+        local enchant = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index]
+        AnsiNote(ColoursToANSI(string.format("@CAENCH FAILED at %d:%s: %s", adb_aench_ctx.enchant_index,
+            adb_enchants[enchant.enchant] .. (enchant.value ~= 0 and enchant.value or ""),
+            adbCombineIdAndNameString(item.id, item.colorName))))
+    end
+
+    local command = ""
+    if adb_aench_ctx[result] ~= "" then
+        command = adb_aench_ctx[result] .. " " .. adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id
+    elseif adb_aench_ctx.container ~= "" then
+        command = "put " .. adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id .. " " .. adb_aench_ctx.container
+    end
+
+    adb_aench_ctx.enchant_index = 1
+    adb_aench_ctx.item_index = adb_aench_ctx.item_index + 1
+    adb_aench_ctx.current_obj = nil
+    adb_aench_ctx.current_enchants = {}
+
+    local func = (adb_aench_ctx.item_index > #adb_aench_ctx.items_queue or
+                     (adb_aench_ctx.stats.counts.Identify == 0 and adb_aench_ctx.stats.counts.Disenchant == 0)) and
+                     adbAenchDrainOne or adbAenchPause
+
+    if command == "" then
+        func()
+    else
+        Capture.untagged_output(command, adb_aench_noecho,
+            adb_aench_ctx[result] == "" and adb_aench_gag_output or false, true, func, true, adbAenchTimeoutCB)
+    end
+end
+
+function adbAenchPause()
+    adbCompact(false, adb_aench_ctx.compact_ctx)
+    adb_aench_ctx.paused = true
+    ColourTell("cyan", "black", "\nType <aench resume> or [")
+    Hyperlink("aench resume", "Click to <aench resume>", "Click to resume AENCH", "green", "black", false)
+    ColourTell("cyan", "black", "]")
+    Note("")
+end
+
+function adbAenchResume()
+    if adb_aench_ctx.paused then
+        adb_aench_ctx.paused = false
+        adbCompact(true, adb_aench_ctx.compact_ctx)
+        adbAenchDrainOne()
+    else
+        adbInfo("AENCH isn't paused!")
+    end
+end
+
+function adbAenchAbort()
+    if adb_aench_ctx.paused then
+        adb_aench_ctx.paused = false
+        adbInfo("Aborting...")
+        adbAenchFinish()
+    else
+        adbInfo("AENCH isn't paused!")
+    end
+end
+
+function adbAenchDrainOne(ignored_arg)
+    if adb_aench_ctx.enchant_index == 1 and not adbAenchCheckFocusFalling() then
+        return
+    end
+
+    if adb_aench_ctx.item_index > #adb_aench_ctx.items_queue then
+        adbAenchFinish()
+        return
+    end
+
+    if adb_aench_ctx.enchant_index > #adb_aench_ctx.enchants then
+        adbAenchOnItemDone("pass")
+        return
+    end
+
+    local item = adb_aench_ctx.items_queue[adb_aench_ctx.item_index]
+    local enchant = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index]
+
+    if adb_aench_ctx.enchant_index == 1 then
+        AnsiNote(ColoursToANSI(string.format("@CAENCH Enchanting [%d/%d]: %s", adb_aench_ctx.item_index,
+            #adb_aench_ctx.items_queue, adbCombineIdAndNameString(item.id, item.colorName))))
+
+        adb_aench_ctx.current_enchants = copytable.deep(adb_aench_ctx.any_skips[adb_aench_ctx.item_index])
+        adb_aench_ctx.picked_item = false
+    end
+
+    if adb_aench_ctx.current_enchants[enchant.enchant] ~= nil then
+        adbDebug("Skipping enchant " .. enchant.enchant, 2)
+        adb_aench_ctx.enchant_index = adb_aench_ctx.enchant_index + 1
+        adbAenchDrainOne()
+        return
+    end
+
+    adb_aench_ctx.step = "Enchanting " .. adb_aench_ctx.item_index .. ":" .. adb_aench_ctx.enchant_index
+
+    local command = "cast " .. enchant.enchant .. " " .. item.id
+    if adb_aench_ctx.container ~= "" and not adb_aench_ctx.picked_item then
+        adb_aench_ctx.picked_item = true
+        command = "get " .. item.id .. " " .. adb_aench_ctx.container .. "\n" .. command
+    end
+    adbAenchCastSpell(command, adbAenchEnchantCastDoneCB, adbAenchCastFail, adbAenchTimeoutCB)
+end
+
+function adbAenchCastFail(command, reason)
+    adbInfo("Failed to do: " .. command .. " because " .. reason)
+    adbAenchFinish()
+end
+
+local adb_aench_cast_ctx = nil
+function adbAenchCastSpell(command, passCB, failCB, timeoutCB)
+    adb_aench_cast_ctx = {
+        command = command,
+        passCB = passCB,
+        failCB = failCB,
+        timeoutCB = timeoutCB
+    }
+    Capture.untagged_output(command, adb_aench_noecho, adb_aench_gag_output, true, adbAenchCastSpellDoneCB, false,
+        timeoutCB)
+end
+
+function adbAenchCastSpellDoneCB(style_lines)
+    adbDebug("adbAenchCastSpellDoneCB", 2)
+    adbDebugTprint(style_lines, 3)
+
+    local failed = false
+    local recast = false
+    local soft_fail = false
+    local reason = "unknown"
+    for _, v in ipairs(style_lines) do
+        local line = strip_colours(StylesToColours(v))
+
+        if line:find("^You do not have that item.$") then
+            failed = true
+            reason = line
+            break
+        end
+
+        local snum, sfail_reason
+        local sfail_to_reason = {
+            ["1"] = "Regular fail, lost concentration.",
+            ["2"] = "Already affected.",
+            ["3"] = "Cast blocked by a recovery, see below.",
+            ["4"] = "Not enough mana.",
+            ["5"] = "You are in a nocast room.",
+            ["6"] = "Fighting or other \"can't concentrate\".",
+            ["8"] = "You don't know the spell.",
+            ["9"] = "Tried to cast self only on other.",
+            ["10"] = "You are resting / sitting.",
+            ["11"] = "Skill/spell has been disabled.",
+            ["12"] = "Not enough moves."
+        }
+        _, _, snum, sfail_reason = line:find("^{sfail}(%-?%d+),%d+,(%d+),%-?%d+$")
+        if snum ~= nil then
+            failed = true
+            recast = sfail_reason == "1"
+            reason = sfail_to_reason[sfail_reason]
+            break
+        end
+
+        if line:match("^You dream about casting your spells.$") ~= nil then
+            failed = true
+            reason = line
+            break
+        end
+
+        if line:match("^You dream about being able to disenchant.$") ~= nil then
+            failed = true
+            reason = line
+            break
+        end
+
+        local enchant = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index]
+        assert(enchant ~= nil)
+
+        if line:match(" is not invisible.$") ~= nil or line:match(" is already glowing.$") ~= nil or
+            line:match(" is already humming gently.$") ~= nil then
+            -- shouldn't really get here
+            assert(adb_aench_ctx.current_enchants[enchant.enchant] ~= nil)
+            failed = true
+            reason = line
+            soft_fail = true
+            break
+        end
+
+        if line:find(" cannot be illuminated%.$") or line:find(" cannot be resonated%.$") then
+            assert(adb_aench_ctx.current_enchants[enchant.enchant] == nil)
+            failed = true
+            reason = line
+            soft_fail = true
+            break
+        end
+
+        local disenchanted
+        _, _, disenchanted = line:find("^The (%a+) enchantment stats have been removed from this item$")
+        if disenchanted ~= nil then
+            assert(disenchanted:upper() == enchant.enchant:upper())
+            assert(adb_aench_ctx.current_enchants[enchant.enchant] ~= nil)
+            adb_aench_ctx.current_enchants[enchant.enchant] = nil
+            break
+        end
+
+        local message_to_enchant_name = {
+            ["^You solidify .+ making it visible again%.$"] = "Solidify",
+            ["starts to glow brightly as you infuse it with holy magic%.$"] = "Illuminate",
+            ["begins to hum softly%.$"] = "Resonate"
+        }
+        for k, v in pairs(message_to_enchant_name) do
+            if line:find(k) then
+                assert(v == enchant.enchant)
+                assert(adb_aench_ctx.current_enchants[enchant.enchant] == nil)
+                -- don't know if enchant is successful yet, so just mark as enchanted
+                adb_aench_ctx.current_enchants[enchant.enchant] = 0
+                break
+            end
+        end
+
+        local enchant_pass_messages = {"^Magic pulses through .+, enhancing its power%.$",
+                                       "^Magic pulses through .+, blessing it with fortune%.$"}
+        for _, v in ipairs(enchant_pass_messages) do
+            if line:find(v) then
+                assert(adb_aench_ctx.current_enchants[enchant.enchant] ~= nil)
+                -- don't know exact stats added, but it's at least 1 now
+                adb_aench_ctx.current_enchants[enchant.enchant] = 1
+                break
+            end
+        end
+
+        -- TODO: add removed due to focus messages and recast
+    end
+
+    if recast then
+        adbAenchCastSpell(adb_aench_cast_ctx.command, adb_aench_cast_ctx.passCB, adb_aench_cast_ctx.failCB,
+            adb_aench_cast_ctx.timeoutCB)
+        return
+    elseif failed and not soft_fail then
+        adb_aench_cast_ctx.failCB(adb_aench_cast_ctx.command, reason)
+        return
+    end
+
+    adb_aench_cast_ctx.passCB(soft_fail, reason)
+end
+
+function adbAenchEnchantCastDoneCB(soft_fail, reason)
+    adbDebug("adbAenchEnchantCastDoneCB", 2)
+
+    local enchant = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index]
+    assert(enchant)
+    adb_aench_ctx.stats.counts[enchant.enchant] = adb_aench_ctx.stats.counts[enchant.enchant] + 1
+
+    if soft_fail then
+        -- can't enchant item at all, mark it as having 0 enchant
+        adb_aench_ctx.current_enchants[enchant.enchant] = 0
+    end
+
+    -- We either know the value is 0, or it's >=1 without running actual Identify command
+    -- TODO: I assume that enchants casted without focus which landed with 0 stats
+    -- can't be disenchanted. Check this few more times?
+    if enchant.value <= adb_aench_ctx.current_enchants[enchant.enchant] or
+        adb_aench_ctx.current_enchants[enchant.enchant] == 0 then
+        adbAenchItemIdReadyCB(nil)
+    else
+        adbDebug("doing ID", 2)
+        adb_aench_ctx.stats.counts.Identify = adb_aench_ctx.stats.counts.Identify + 1
+        adbIdentifyItem("id " .. adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id, adbAenchItemIdReadyCB)
+    end
+end
+
+function adbAenchItemIdReadyCB(obj)
+    adbDebug("adbAenchItemIdReadyCB", 2)
+    adbDebugTprint(obj, 3)
+    adbDebugTprint(adb_aench_ctx.enchants, 3)
+
+    if obj ~= nil and obj.stats.id == nil then
+        adbInfo("Item " .. adb_aench_ctx.item .. " not found!")
+        adbAenchFinish()
+        return
+    end
+
+    adb_aench_ctx.current_obj = obj
+    local enchant = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index]
+    local min_value = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index].value
+
+    if obj ~= nil then
+        table.insert(adb_aench_ctx.stats[enchant.enchant], {
+            sum = adbGetEnchantSum(obj.enchants[enchant.enchant]),
+            ench = copytable.deep(obj.enchants[enchant.enchant])
+        })
+    elseif adb_aench_ctx.current_enchants[enchant.enchant] == 0 then
+        table.insert(adb_aench_ctx.stats[enchant.enchant], {
+            sum = 0,
+            ench = {}
+        })
+    end
+
+    if adb_aench_ctx.current_enchants[enchant.enchant] == nil or (obj ~= nil and obj.enchants[enchant.enchant] == nil) then
+        adbErr("AENCH no " .. enchant.enchant .. " enchant on item!")
+        adbAenchFinish()
+        return
+    end
+
+    if min_value <= adb_aench_ctx.current_enchants[enchant.enchant] or
+        (obj ~= nil and min_value <= adbGetEnchantSum(obj.enchants[enchant.enchant])) then
+        adb_aench_ctx.enchant_index = adb_aench_ctx.enchant_index + 1
+        adbAenchDrainOne()
+        return
+    end
+
+    if adb_aench_ctx.current_enchants[enchant.enchant] == 0 or not obj.enchants[enchant.enchant].removable then
+        adbAenchOnItemDone("fail")
+        return
+    end
+
+    -- should only get here if item was actually identified
+    local command = "disenchant " .. adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id .. " " .. enchant.enchant ..
+                        " confirm"
+    adbAenchCastSpell(command, adbAenchDisenchantCastDoneCB, adbAenchCastFail, adbAenchTimeoutCB)
+end
+
+function adbAenchDisenchantCastDoneCB(soft_fail)
+    adbDebug("adbAenchDisenchantCastDoneCB", 2)
+    assert(not soft_fail)
+
+    adb_aench_ctx.stats.counts.Disenchant = adb_aench_ctx.stats.counts.Disenchant + 1
+
+    -- skip unnecessary item id, just alter relevant enchant and flags
+    if adb_aench_ctx.current_obj ~= nil then
+        local obj = adb_aench_ctx.current_obj
+        local enchant = adb_aench_ctx.enchants[adb_aench_ctx.enchant_index]
+        obj.enchants[enchant.enchant] = nil
+        if enchant.enchant == "Solidify" then
+            obj.stats.flags = obj.stats.flags:gsub("solidified", "")
+            obj.stats.flags = obj.stats.flags .. " invis"
+        elseif enchant.enchant == "Illuminate" then
+            obj.stats.flags = obj.stats.flags:gsub("illuminated", "")
+            obj.stats.flags = obj.stats.flags:gsub("glow", "")
+        elseif enchant.enchant == "Resonate" then
+            obj.stats.flags = obj.stats.flags:gsub("resonated", "")
+            obj.stats.flags = obj.stats.flags:gsub("hum", "")
+        else
+            adbErr("Unknown enchant " .. enchant.enchant)
+            adbAenchFinish()
+            return
+        end
+    end
+
+    adb_aench_ctx.enchant_index = adb_aench_ctx.enchant_index + 1
+    if adb_aench_ctx.enchant_index > #adb_aench_ctx.enchants then
+        adbAenchOnItemDone("fail")
+    else
+        adbAenchDrainOne()
+    end
 end
 
 ------ Adb shop ------
@@ -2124,7 +2900,7 @@ adbAreaNameXref = {
     ["From Vanir"] = "vanir",
     ["Fellchantry"] = "chantry",
     ["Sea King's Dominion"] = "seaking",
-    ["Transcendence"] = "transcend",
+    ["Transcendence"] = "transcend"
 }
 
 ------  ACMP -------
@@ -2215,6 +2991,16 @@ function adbAcmpEqDataReadyCB(style_lines)
     end
 end
 
+function adbCombineIdAndNameString(id, colorName)
+    local name = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(colorName) or colorName
+    name = "@w[@W" .. tostring(id) .. "@w]:" .. name
+    return name
+end
+
+function adbGetItemIdAndNameString(obj)
+    return adbCombineIdAndNameString(obj.stats.id, obj.colorName)
+end
+
 function adbAcmpItem2IdReadyCB(obj, ctx)
     if obj.stats.id == nil then
         if ctx.item2 ~= "" then
@@ -2225,13 +3011,10 @@ function adbAcmpItem2IdReadyCB(obj, ctx)
         return
     end
 
-    local base_name = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(obj.colorName) or obj.colorName
-    base_name = "@W" .. tostring(obj.stats.id) .. "@w:" .. base_name
-    local item_name = adb_options.cockpit.show_bloot_level and adbAddBlootLevel(ctx.obj1.colorName) or
-                          ctx.obj1.colorName
-    item_name = "@W" .. tostring(ctx.obj1.stats.id) .. "@w:" .. item_name
+    local base_name = adbGetItemIdAndNameString(obj)
+    local item_name = adbGetItemIdAndNameString(ctx.obj1)
     local worn = ctx.item2 == "" and "worn " or ""
-    AnsiNote(ColoursToANSI("@CComparing @w[" .. item_name .. "@w] @Cto " .. worn .. "@w[" .. base_name .. "@w]"))
+    AnsiNote(ColoursToANSI("@CComparing " .. item_name .. " @Cto " .. worn .. base_name))
 
     local diff = adbDiffItems(obj, ctx.obj1, false)
     local message = adbIdReportAddDiffString("", diff, ctx.format, true)
@@ -2657,8 +3440,8 @@ local adb_bloot_names = {
     Eternal = 15,
     Legendary = 16,
     Epic = 17,
-    Mythical = 18,
-    Fabled = 19,
+    Fabled = 18,
+    Mythical = 19,
     Divine = 20,
     Godly = 21
 }
@@ -3480,6 +4263,8 @@ local adb_help = {
 @Wadb find@w      - search the item database, see @Gadb help find@w for more details.
 @Waide@w          - command to search/manage items based on their enchants,
                 see @Gadb help aide@w for more details.
+@Waench@w         - command to enchant or batch enchant items.
+                see @Gadb help aench@w for more details.
 
 @Wadb [on|off]@w  - disable or enable auto actions.
                 It's the same as typing longer command:
@@ -3682,8 +4467,9 @@ See "@Gadb help fields@w" for a list of available fields.
     ["aide"] = [[
 @R-----------------------------------------------------------------------------------------------
 @Waide [container_id] [enchanted] [removable] [S<num>] [I<num>] [R<num>] [IR<num>] [format.name] [command.<command>]@w - Enchanters aid.
-This command will identify all matching items in the container or inventory if @Gcontainer_id@w is not specified and 
-run a given @G<command>@w if it's specified.
+This command will identify all matching items in the container or inventory if @Gcontainer_id@w is not specified.
+See @Ghelp objectid@w for deails on gettings/using @Gcontainer id@w.
+It will run a given @G<command>@w on all matching items if it's specified.
 
 @Genchanted@w - only show items which have one or more enchants present
 @Gremovable@w - only show items which have one or more removable (by enchanter) enchants
@@ -3757,6 +4543,118 @@ location which will be automatically updated if you find a mob dropping this ite
 @R-----------------------------------------------------------------------------------------------
 @WADB shares lots of field names with the ones in DINV plugin (listed below after specific fields).
 @RNote@W: field names are @RCase SeNsItIvE@W and should be prefixed with @G%@W if used in auto actions.
+  ]],
+    ["aench"] = [[
+@R-----------------------------------------------------------------------------------------------
+@Waench [<item> | container.<container_id>] <S|I|R>[num]... [any] [nofocus] [format.<name>] [fail.<command>] [pass.<command>]@w
+@WUse this command to enchant a single item or batch enchant items in inventory or container.
+
+@Waench resume@w - resume batch processing (more details below).
+@Waench abort@w - abort batch processing (more details below).
+
+@Gitem@w                     - item name or id to enchant.
+@Gcontainer.<container_id>@w - container id to enchant items in.
+  See @Ghelp objectid@w for deails on gettings/using @Gcontainer_id@w.
+@WNote: If neither @G<item>@W nor @Gcontainer.<container_id>@W is present will enchant items in inventory.
+
+@G<S|I|R>[num]...@w          - one or more S I R with optional number (like S8) in any sequence.
+  See below for more details.
+
+@Gany@w                      - use this option to process items enchantable with any of the requested enchants.
+  By default @Caench@w command will only process items which could be enchanted by all of the requested enchants.
+
+@Gnofocus@w                  - don't check @Wenchanters focus@w affect, percentage and duration.
+  By default @Caench@w command will abort if you're not affected by @W100% enchanters focus@w
+  or remaining duration is less than @W30 seconds@w when starting to process new item.
+
+@Gformat.<name>@w            - format to use with Identify output, defaults to @Wcockpit.aide_format@w option.
+
+@Gfail.<command>@w           - execute given @G<command>@w for items not passing requested enchant options.
+@Gpass.<command>@w           - execute given @G<command>@w for "Successfully" enchanter items.
+@G<command>@w does @Gnot@w have to be a single word.
+  For ex: @Waench S2 fail.echo I failed enchanting this pass.echo I've finally made a great item
+@WNote@w: Item ID or keyword will be appended to the end of given @G<command>@w.
+  You can use your aliases in the @G<command>@w if you need item id somewhere else.
+  Fox ex: use @Gfail.dropsac@w to call alias @Gdropsac@w on failed items.
+  Which could be something like @Cdropsac *@w -> @Cdrop %1;sacrifice %1
+
+@WAll @Caench@W arguments are optional except that there has to be at least one requested enchant via @G<S|I|R>[num]...@w group.
+
+@G<S|I|R>[num]...@w group has the following meaning:
+  @GS@w - Cast @MSolidify@w on item(s)
+  @GI@w - Cast @MIlluminate@w on item(s)
+  @GR@w - Cast @MResonate@w on item(s)
+  @GS<num>@w - Cast @MSolidify@w on item, @Wdisenchant@w if @MSolidify@w landed with less than @G<num>@w stats.
+           If it's not possible to @Wdisenchant@w (without using TPs) consider item as @Mfailed@w.
+@WSome examples: 
+  @CR S I@w - cast resonate. cast solidify. cast illuminate.
+          Only items which could be enchanted by all 3 spells would be processed unless @Gany@w option is present.
+
+  @CS8 S2 I4 I@w - cast solidify. disenchant if it gave @Gless than 8@w HR/DR.
+               cast solidify if disenchanted in the step above. if it still gives @Gless than 2@w HR/DR then fail.
+               cast illuminate, disenchant if it gave @G<4@w stats.
+               cast illuminate if disenchanted in the step above.
+
+  @CS8 S I5 I @Gany@w - will go though all items which could be Solidified and/or Illuminated.
+                    @CS8 S@w would be ignored for items which can't be Solidified.
+                    @CI5 I@w would be ignored for items which can't be Illuminated.
+
+@RNote: I suppose you will not be able to use @GS<num>@w form if you don't have @Gidentify wish@w.
+Might add a check for it one day, but I'm lazy :D
+
+Batch enchanting will work automatically only if you're not using @GS<num>@W form.
+@WOtherwise you'll have to either type @Caench resume@W or click the link when single item is processed.
+
+@WExamples:
+
+@Maench cap I8 I6 R4 R2 fail.sell
+@CAENCH Enchanting [1/1]: @w[@W2832990729@w]:@g[@wRecruit@g] @yCa@gmo@wuf@yla@gge @wCa@yp
+@R39912@w/@r39912@whp @G13827@w/@g13927@wmana @Y908@wtnl Quest: @C26@G Dbl: 7 @bNESW@B>
+@D[@W2832990729@D] @g[@wRecruit@g] @yCa@gmo@wuf@yla@gge @wCa@yp @D[@C1@D lvl] [@Whead@D] [@Y12@Dstats] [@G1@Dstr @G4@Dwis @G7@Dluk] [@CIR@D]
+@x051 Illuminate @x244[@x046+4@x244wis @x046+4@x244luk] [remove Illuminate]@x051 Resonate @x244[@x046+3@x244luk] [@x196TP only@x244]
+@CADB: aench command finished
+
+@Maench container.2682741121 R4 R3 I5 I3 fail.sell
+@CAENCH Enchanting [1/3]: @w[@W2833002690@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@CAENCH FAILED at 2:R3: @w[@W2833002690@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+
+@x051Type <aench resume> or [@x002Click to <aench resume>@x051]
+
+@CAENCH Enchanting [2/3]: @w[@W2833002695@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@D[@W2833002695@D] @g[@wRecruit@g] Br@wow@yn L@gea@wth@yer @gBe@wlt @D[@C1@D lvl] [@Wwaist@D] [@Y10@Dstats] [@G4@Dwis @G6@Dluk] [@CIR@D]
+@x051 Illuminate @x244[@x046+2@x244wis @x046+3@x244luk] [@x196TP only@x244]@x051 Resonate @x244[@x046+1@x244wis @x046+3@x244luk] [remove Resonate]
+
+@x051Type <aench resume> or [@x002Click to <aench resume>@x051]
+
+@CAENCH Enchanting [3/3]: @w[@W2833002696@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@CAENCH FAILED at 2:R3: @w[@W2833002696@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@x021ADB: ------------------------------ AENCH ------------------------------
+@CProcessed @W3 @Citems, @G1@C successfully.
+@CDisenchanted @W3 @Ctime(s), identified @W7 @Ctimes(s).
+@CSolidified @W0 @Ctime(s):
+@CIlluminated @W2 @Ctime(s):
+@W      TOTAL: 4.00 @Cavg @R3 @Cmin @G5 @Cmax
+@W       LUCK: 1.50 @Cavg @R0 @Cmin @G3 @Cmax
+@W        WIS: 2.50 @Cavg @R2 @Cmin @G3 @Cmax
+@CResonated @W5 @Ctime(s):
+@W      TOTAL: 2.80 @Cavg @R2 @Cmin @G4 @Cmax
+@W       LUCK: 2.60 @Cavg @R2 @Cmin @G3 @Cmax
+@W        WIS: 0.20 @Cavg @R0 @Cmin @G1 @Cmax
+@CADB: aench command finished
+
+@Maench container.2682741121 I S R any nofocus
+@CAENCH Enchanting [1/2]: @w[@W2833007158@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@CAENCH PASS: @w[@W2833007158@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@CAENCH Enchanting [2/2]: @w[@W2833007160@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@CAENCH PASS: @w[@W2833007160@w]:@g[@wRecruit@g] Br@Dow@yn L@gea@Dth@yer @gBe@Dlt
+@x021ADB: ------------------------------ AENCH ------------------------------
+@CProcessed @W2 @Citems, @G2@C successfully.
+@CDisenchanted @W0 @Ctime(s), identified @W0 @Ctimes(s).
+@CSolidified @W0 @Ctime(s):
+@CIlluminated @W2 @Ctime(s):
+@CResonated @W2 @Ctime(s):
+@CADB: aench command finished
+@R-----------------------------------------------------------------------------------------------
   ]],
     ["changelog"] = [[
 @R-----------------------------------------------------------------------------------------------
@@ -3877,6 +4775,11 @@ Add timeout check to adbIdentifyItem
 Added help for db fields used in 'adb find' and auto_actions.
 Added ADB_AddItem
 Added Transcendence zone short name.
+1.041
+Added aench command.
+Compacted output for aide command.
+Fixed bloot order for Fabled = 18, Mythical = 19.
+Removed error message on rare loot queue desync.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
@@ -3888,21 +4791,21 @@ local adb_ignore_dinv_fields = {
     ["key"] = true,
     ["keyword"] = true,
     ["rlocation"] = true,
-    ["rname"] = true,
+    ["rname"] = true
 }
 
 local adb_fields = {
     ["dbid"] = {
         name = "dbid",
-        desc = "Unique database row id for item.",
+        desc = "Unique database row id for item."
     },
     ["colorName"] = {
         name = "colorName",
-        desc = "Item name including aardwolf color codes.",
+        desc = "Item name including aardwolf color codes."
     },
     ["zone"] = {
         name = "zone",
-        desc = "Shorname for a zone item is looted from.",
+        desc = "Shorname for a zone item is looted from."
     },
     ["comment"] = {
         name = "comment",
@@ -3910,15 +4813,15 @@ local adb_fields = {
     },
     ["identifyLevel"] = {
         name = "identifyLevel",
-        desc = "\"@Gfull@W\" for items identified with \"@Gidentify wish@W\". Other modes aren't supported much as of now.",
+        desc = "\"@Gfull@W\" for items identified with \"@Gidentify wish@W\". Other modes aren't supported much as of now."
     },
     ["spellsXlevel"] = {
         name = "spellsXlevel",
-        desc = "Level of the spell number X cast by item. Use as spells1level .. spells5level.",
+        desc = "Level of the spell number X cast by item. Use as spells1level .. spells5level."
     },
     ["spellsXname"] = {
         name = "spellsXname",
-        desc = "Name of the spell number X cast by item. Use as spells1name .. spells5name.",
+        desc = "Name of the spell number X cast by item. Use as spells1name .. spells5name."
     },
     ["spellsXcount"] = {
         name = "spellsXcount",
@@ -3959,7 +4862,8 @@ function adbHelpFields()
     adbPrintFields(adb_fields)
     AnsiNote(ColoursToANSI("\n@W------ Fields common with DINV ------\n"))
     adbPrintFields(inv.stats)
-    AnsiNote(ColoursToANSI("@R-----------------------------------------------------------------------------------------------"))
+    AnsiNote(ColoursToANSI(
+        "@R-----------------------------------------------------------------------------------------------"))
 end
 
 function adbOnHelp(name, line, wildcards)
@@ -4043,7 +4947,7 @@ end
 -- Some item names in the game have extra(erroneous) color codes which appear in the inv/keyring data
 -- but can't be captured in the identify output.
 local color_names_fixup = {
-    ["@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of @rf@Rl@Ya@ym@Re@r@Ys@y)"] = "@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of f@Rl@Ya@ym@Re@Ys@y)",
+    ["@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of @rf@Rl@Ya@ym@Re@r@Ys@y)"] = "@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of f@Rl@Ya@ym@Re@Ys@y)"
 }
 ------- Functions for external plugins -------
 
@@ -4054,8 +4958,7 @@ function ADB_GetItem(color_name)
     if color_name == nil then
         return serialize.save_simple(result)
     end
-    color_name = color_names_fixup[color_name] ~= nil and
-                 color_names_fixup[color_name] or color_name
+    color_name = color_names_fixup[color_name] ~= nil and color_names_fixup[color_name] or color_name
     return serialize.save_simple(adbCacheGetItemsByName(color_name))
 end
 
@@ -4071,7 +4974,7 @@ function ADB_IdentifyItem(command, plugin, callback, ctx)
     local id_ctx = {
         plugin = plugin,
         callback = callback,
-        ctx = ctx,
+        ctx = ctx
     }
     adbIdentifyItem(command, function(obj, ctx)
         CallPlugin(ctx.plugin, ctx.callback, serialize.save_simple(obj), ctx.ctx)
@@ -4084,8 +4987,8 @@ end
 function ADB_AddItem(item)
     adbDebug("ADBAddItem " .. item, 2)
     local item = loadstring(string.format("return %s", item))()
-    if item == nil or item.stats == nil or item.stats.name == nil or item.colorName == nil or
-       item.stats.foundat == nil or adbGetBlootLevel(item.stats.name) > 0 then
+    if item == nil or item.stats == nil or item.stats.name == nil or item.colorName == nil or item.stats.foundat == nil or
+        adbGetBlootLevel(item.stats.name) > 0 then
         return false
     end
     item.location = item.location == nil and {} or item.location
