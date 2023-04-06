@@ -1660,7 +1660,7 @@ function adbInvDataDrainIdentifyReadyCB(obj, ctx)
         if ctx.command ~= "" then
             local command = ctx.command .. " " .. obj.stats.id
             if ctx.bagid ~= "" then
-                command = "get " .. item_id .. " " .. ctx.bagid .. "\n" .. command
+                command = "get " .. obj.stats.id .. " " .. ctx.bagid .. "\n" .. command
             end
             Execute(command)
         end
