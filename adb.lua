@@ -1847,7 +1847,7 @@ end
 
 function adbAenchCheckFocusFalling()
     if adb_aench_ctx.focus ~= nil and adb_aench_ctx.focus.falls - os.time() < 20 then
-        adbInfo("AENCH Enchanters focus is fading soon! Aboring! (add nofocus if you don't care)")
+        adbInfo("AENCH Enchanters focus is fading soon! Aborting! (add nofocus if you don't care)")
         adbAenchFinish()
         return false
     end
