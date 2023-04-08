@@ -151,6 +151,10 @@ function akmAdbKeyFilter(id, bloot, item)
     return item.stats.type == "Key" or string.find(item.stats.flags, "iskey")
 end
 
+function akmHasRotTimer(item)
+    return item.stats.notes ~= nil and string.find(item.stats.notes, "^Expires in")
+end
+
 function akmOnKeyLooted(id, bloot, item)
     local item = loadstring(string.format("return %s", item))()
     
@@ -165,7 +169,13 @@ function akmOnKeyLooted(id, bloot, item)
         end
     end
 
-    SendNoEcho("keyring put " .. tostring(id))
+    if not akmHasRotTimer(item) then
+        table.insert(akm_state.keyring, {
+            id = id,
+            item = item,
+        })
+        SendNoEcho("keyring put " .. tostring(id))
+    end
 end
 
 ------ Options ------
@@ -317,6 +327,9 @@ Initial drop.
 Capture timed out id requests.
 1.003
 Add existing keys to DB if needed.
+1.004
+Fix deduplicating of freshly looted keys.
+Don't try to put keys with rot timer on keyring.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
@@ -379,7 +392,7 @@ function akmCheckClientVersion()
     end
 end
 
-local akm_min_adb_version = 1.040
+local akm_min_adb_version = 1.042
 function akmCheckADBVersion()
     if GetPluginInfo(adb_plugin_id, 19) == nil then
         akmErr("AKM requires ADB plugin!")
