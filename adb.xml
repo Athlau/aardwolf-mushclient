@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.042"
+   version="1.043"
    >
 <description trim="y">
 <![CDATA[
@@ -38,11 +38,8 @@
 
 @wType @Gadb help@w for more information.
 
-1.042
-Return alpha sorted list of mobs in item location info.
-Finally decided to and "Midgaard" zone as "kerofk".
-Capture item Notes in identify results, useful for rot timers etc.
-Bumped DB and ID module versions.
+1.043
+Aench no longer attempts to disenchant items if not used by enchanter.
 ]]>
 </description>
 

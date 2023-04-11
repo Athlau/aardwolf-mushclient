@@ -2283,6 +2283,13 @@ function adbAenchCastSpellDoneCB(style_lines)
             break
         end
 
+        if line:find("Repeat this command with the 'confirm tp' option to continue%.") then
+            failed = true
+            reason = line
+            soft_fail = true
+            break
+        end
+
         local disenchanted
         _, _, disenchanted = line:find("^The (%a+) enchantment stats have been removed from this item$")
         if disenchanted ~= nil then
@@ -2404,14 +2411,22 @@ function adbAenchItemIdReadyCB(obj)
     end
 
     -- should only get here if item was actually identified
-    local command = "disenchant " .. adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id .. " " .. enchant.enchant ..
-                        " confirm"
-    adbAenchCastSpell(command, adbAenchDisenchantCastDoneCB, adbAenchCastFail, adbAenchTimeoutCB)
+    if gmcp("char.base.subclass") == "Enchanter" then
+        local command = "disenchant " .. adb_aench_ctx.items_queue[adb_aench_ctx.item_index].id .. " " .. enchant.enchant ..
+                            " confirm"
+        adbAenchCastSpell(command, adbAenchDisenchantCastDoneCB, adbAenchCastFail, adbAenchTimeoutCB)
+    else
+        adbAenchOnItemDone("fail")
+        return
+    end
 end
 
 function adbAenchDisenchantCastDoneCB(soft_fail)
     adbDebug("adbAenchDisenchantCastDoneCB", 2)
-    assert(not soft_fail)
+
+    if soft_fail then
+        adbAenchOnItemDone("fail")
+    end
 
     adb_aench_ctx.stats.counts.Disenchant = adb_aench_ctx.stats.counts.Disenchant + 1
 
@@ -2436,10 +2451,10 @@ function adbAenchDisenchantCastDoneCB(soft_fail)
         end
     end
 
-    adb_aench_ctx.enchant_index = adb_aench_ctx.enchant_index + 1
-    if adb_aench_ctx.enchant_index > #adb_aench_ctx.enchants then
+    if adb_aench_ctx.enchant_index == #adb_aench_ctx.enchants then
         adbAenchOnItemDone("fail")
     else
+        adb_aench_ctx.enchant_index = adb_aench_ctx.enchant_index + 1
         adbAenchDrainOne()
     end
 end
@@ -4830,6 +4845,8 @@ Return alpha sorted list of mobs in item location info.
 Finally decided to and "Midgaard" zone as "kerofk".
 Capture item Notes in identify results, useful for rot timers etc.
 Bumped DB and ID module versions.
+1.043
+Aench no longer attempts to disenchant items if not used by enchanter.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
