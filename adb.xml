@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.041"
+   version="1.042"
    >
 <description trim="y">
 <![CDATA[
@@ -38,11 +38,11 @@
 
 @wType @Gadb help@w for more information.
 
-1.041
-Added aench command.
-Compacted output for aide command.
-Fixed bloot order for Fabled = 18, Mythical = 19.
-Removed error message on rare loot queue desync.
+1.042
+Return alpha sorted list of mobs in item location info.
+Finally decided to and "Midgaard" zone as "kerofk".
+Capture item Notes in identify results, useful for rot timers etc.
+Bumped DB and ID module versions.
 ]]>
 </description>
 

@@ -362,6 +362,7 @@ function adbOnOptionsEditCommand(name, line, wildcards)
             keys[k] = k
         end
     end
+
     local key1 = utils.choose("Select option group to edit", "ADB", keys, "cockpit")
     if key1 == nil then
         return
@@ -907,6 +908,8 @@ function adbOnItemLooted(id, item)
         return
     end
 
+    assert(item.location ~= nil and item.location.zone ~= nil)
+
     local bloot = adbGetBlootLevel(item.stats.name)
     if bloot > 0 then
         adbDebug("Not touching bloot " .. tostring(bloot) .. " item.", 1)
@@ -1204,8 +1207,8 @@ function adbDrainIdResultsReadyCB(item, ctx)
             -- if identify had to queue this call, cache_item was copied and no longer
             -- references actual table in recent cache.
             local cache_item = adb_recent_cache[adbCacheGetKey(ctx.cache_item.colorName, ctx.cache_item.location.zone)]
-            assert(cache_item)
             adbCacheItemUpdateIdentify(cache_item, item)
+            item.location = copytable.deep(cache_item.location)
         end
     end
 
@@ -1265,12 +1268,16 @@ function adbLootedStackPush(item)
         end
 
         -- Failed, report and clear stacks
-        adbErr("------- adbLootedStackPush error -------")
-        Note("Make sure you have invmon enabled. Type invmon to check.")
-        Note("pushing:")
-        tprint(item)
-        adbOnAdbDebugDump()
-        adbErr("Sync is broken between invitem/looted stacks.")
+        if adb_debug_level > 0 then
+            adbErr("------- adbLootedStackPush error -------")
+            Note("Make sure you have invmon enabled. Type invmon to check.")
+            Note("pushing:")
+            tprint(item)
+            adbOnAdbDebugDump()
+            adbErr("Sync is broken between invitem/looted stacks.")
+        else
+            adbInfo("Cleared loot stack cause something wasn't right.")
+        end
 
         adb_invitem_stack = {}
         adb_looted_stack = {}
@@ -2873,7 +2880,6 @@ adbAreaNameXref = {
     ["The Keep of the Asherodan"] = "asherodan",
     ["Bloodlust Dungeon"] = "dungeon",
     ["Oradrin's Chosen"] = "oradrin",
-    -- ["Midgaard"] = "",
     ["From The Midgaardian Publishing Group"] = "gaardian",
     ["From The Seekers"] = "seekers",
     ["From Boot Camp"] = "bootcamp",
@@ -2900,7 +2906,9 @@ adbAreaNameXref = {
     ["From Vanir"] = "vanir",
     ["Fellchantry"] = "chantry",
     ["Sea King's Dominion"] = "seaking",
-    ["Transcendence"] = "transcend"
+    ["Transcendence"] = "transcend",
+    -- It's an old zone which no longer exists, but most items seems to be in kerofk.
+    ["Midgaard"] = "kerofk"
 }
 
 ------  ACMP -------
@@ -3170,13 +3178,37 @@ function adbShortenRoomsString(rooms)
     return result
 end
 
+-- Taken from http://stackoverflow.com/questions/15706270/sort-a-table-in-lua
+function spairs(t, order)
+    -- collect the keys
+    local keys = {}
+    for k in pairs(t) do keys[#keys+1] = k end
+
+    -- if order function given, sort by it by passing the table and keys a, b,
+    -- otherwise just sort the keys
+    if order then
+        table.sort(keys, function(a,b) return order(t, a, b) end)
+    else
+        table.sort(keys)
+    end
+
+    -- return the iterator function
+    local i = 0
+    return function()
+        i = i + 1
+        if keys[i] then
+            return keys[i], t[keys[i]]
+        end
+    end
+end
+
 function adbIdReportAddLocationInfo(report, location)
     if location == nil then
         return report
     end
 
     local header_added = false
-    for k, v in pairs(location.mobs) do
+    for k, v in spairs(location.mobs, function (t, a, b) return t[a].colorName < t[b].colorName end) do
         if not header_added then
             report = report .. "\n" .. adb_options.colors.section .. " Looted from:"
             header_added = true
@@ -3545,7 +3577,7 @@ end
 
 ------ DB ------
 adb_db_filename = "adb.db"
-adb_db_version = 3
+adb_db_version = 4
 adb_db = nil
 
 local adb_db_special_fields = {
@@ -4069,6 +4101,19 @@ function adbDbUpdateVersion(version)
     ]]
         adbDbCheckExecute(sql)
         version = 3
+        adbInfo("Updated DB to version " .. version)
+    end
+
+    if version == 3 then
+        local sql = [[
+      PRAGMA foreign_keys = ON;
+      BEGIN TRANSACTION;
+      ALTER TABLE items ADD notes TEXT;
+      COMMIT;
+      PRAGMA user_version = 4;
+    ]]
+        adbDbCheckExecute(sql)
+        version = 4
         adbInfo("Updated DB to version " .. version)
     end
 
@@ -4780,6 +4825,11 @@ Added aench command.
 Compacted output for aide command.
 Fixed bloot order for Fabled = 18, Mythical = 19.
 Removed error message on rare loot queue desync.
+1.042
+Return alpha sorted list of mobs in item location info.
+Finally decided to and "Midgaard" zone as "kerofk".
+Capture item Notes in identify results, useful for rot timers etc.
+Bumped DB and ID module versions.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }

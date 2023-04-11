@@ -11,7 +11,7 @@ idContext = nil
 idCommand = nil
 initialized = false
 
-adb_id_version = 2
+adb_id_version = 3
 local adb_id_queue = {}
 local adb_id_busy = false
 
@@ -156,6 +156,13 @@ function adbOnItemIdStatsLine(name, line, wildcards, styles)
     _, _, skill, value = line:find("^| [%a%s]+:? Modifies ([%a%s]+) by ([%+%-]%d+)%s+|$")
     if skill ~= nil then
         idObject.skillMods[skill] = tonumber(value);
+    end
+
+    -- capture rot timer
+    local notes
+    _, _, notes = line:find("^| Notes%s+: (.-)%s+|$")
+    if notes ~= nil then
+        idObject.stats.notes = notes
     end
 end
 
