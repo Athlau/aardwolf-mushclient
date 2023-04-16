@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-03-15 15:14:32"
    requires="5.07"
-   version="1.004"
+   version="1.005"
    >
 <description trim="y">
 <![CDATA[
@@ -33,9 +33,8 @@ Gets keys used for areas in your Q/GQ/CP level range from container.
 
 @w Type @Gakm help@w for more information.
 
-1.004
-Fix deduplicating of freshly looted keys.
-Don't try to put keys with rot timer on keyring.
+1.005
+Fix mismatches of some invdata keyring names vs identified names.
 ]]>
 </description>
 </plugin>

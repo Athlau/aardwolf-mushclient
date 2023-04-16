@@ -41,6 +41,12 @@ function akmDedupKeyring()
     akmInfo("Done")
 end
 
+local akm_invdata_keyname_fixes = {
+    ["a @WS@whimmering @wK@Dey"] = "a @WS@whimmering Key",
+    ["@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of @rf@Rl@Ya@ym@Re@r@Ys@y)"] = "@Y(t@Rh@re a@Rm@Yu@yl@Re@rt of f@Rl@Ya@ym@Re@Ys@y)",
+    ["@x094a small key"] = "@ya small key",
+}
+
 function akmKeyringDataReadyCB(style_lines)
     akmDebug("akmKeyringDataReadyCB", 2)
     for _, v in ipairs(style_lines) do
@@ -52,7 +58,7 @@ function akmKeyringDataReadyCB(style_lines)
             table.insert(akm_keyring_data_queue, {
                 id = id,
                 flags = flags,
-                name = name,
+                name = akm_invdata_keyname_fixes[name] and akm_invdata_keyname_fixes[name] or name,
                 level = tonumber(level),
             })
         else
@@ -157,6 +163,7 @@ end
 
 function akmOnKeyLooted(id, bloot, item)
     local item = loadstring(string.format("return %s", item))()
+    assert(akm_state.keyring ~= nil)
     
     for _, v in ipairs(akm_state.keyring) do
         if v.item.colorName == item.colorName then
@@ -330,6 +337,8 @@ Add existing keys to DB if needed.
 1.004
 Fix deduplicating of freshly looted keys.
 Don't try to put keys with rot timer on keyring.
+1.005
+Fix mismatches of some invdata keyring names vs identified names.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
