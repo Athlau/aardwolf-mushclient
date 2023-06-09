@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2022-11-19 15:06:56"
    requires="5.07"
-   version="1.001"
+   version="1.002"
    >
 </plugin>
 
@@ -29,10 +29,9 @@
    keep_evaluating="y"
    match="^(?:\*)?\[\d+\] Your (?<spell>anguish|blast of fury|bone-crunching force|neural overload|projected force|traumatic sending|shroud of flame) .*$"
    regexp="y"
-   sequence="150"
+   sequence="0"
    script="Desa_process_damage"
    send_to="12"
-
   >
   </trigger>
   <trigger
@@ -201,31 +200,27 @@ damage_to_command = {
   ["shroud of flame"] = "immo",
 }
 
+local internal_cast = false
 function Desa_cast(target, spell)
     Send("cast " .. "'" .. spell .. "' " ..target)
     AddDesolationStack(1)
-    Note("stack "..tostring(desolation_stack_size))
+    --Note("stack "..tostring(desolation_stack_size).. ":" .. external_count)
 end
 
 function Desa_prompt()
+  --Note("prompt")
   desolation_ignore_untill_prompt = false
 end
 
 function Desa_process_damage(name, line, wildcards)
-  Note("trig")
-  wait.make(function()
-    wait.time(0.01)
-    if desolation_ignore_untill_prompt then
-      --Note("ignoring")
-      --Note("stack "..tostring(desolation_stack_size))
-    else
-      local stack = AddDesolationStack(-1)
-      if stack == 0 then
-        Execute(damage_to_command[wildcards.spell])
-      end
-      desolation_ignore_untill_prompt = true
+  --Note("trig")
+  if not desolation_ignore_untill_prompt then
+    desolation_ignore_untill_prompt = true
+    local stack = AddDesolationStack(-1)
+    if stack == 0 then
+      Execute(damage_to_command[wildcards.spell])
     end
-  end)
+  end
 end
 
 function Desa_decrease()
