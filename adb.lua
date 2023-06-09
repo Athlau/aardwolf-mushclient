@@ -95,6 +95,7 @@ temple:a blood-red ruby
 temple:a sparkling diamond
 temple:a topaz of worth
 temple:a magical bonding agent
+damned:a belt of thorns
 ]],
             auto_adb_off_for_zones = [[icefall
 oradrin
@@ -2923,7 +2924,9 @@ adbAreaNameXref = {
     ["Sea King's Dominion"] = "seaking",
     ["Transcendence"] = "transcend",
     -- It's an old zone which no longer exists, but most items seems to be in kerofk.
-    ["Midgaard"] = "kerofk"
+    ["Midgaard"] = "kerofk",
+    -- Aardwords items
+    ["From The Wolf Administration"] = "wolfadmin"
 }
 
 ------  ACMP -------
@@ -4847,6 +4850,8 @@ Capture item Notes in identify results, useful for rot timers etc.
 Bumped DB and ID module versions.
 1.043
 Aench no longer attempts to disenchant items if not used by enchanter.
+1.044
+Added fake shortname for "From The Wolf Administration" zone.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }
