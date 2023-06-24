@@ -4852,6 +4852,8 @@ Bumped DB and ID module versions.
 Aench no longer attempts to disenchant items if not used by enchanter.
 1.044
 Added fake shortname for "From The Wolf Administration" zone.
+1.045
+Changed plugin sequence to -100, so it's guaranteed to run before AKM etc.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }

@@ -15,7 +15,8 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.044"
+   version="1.045"
+   sequence="-100"
    >
 <description trim="y">
 <![CDATA[
@@ -38,8 +39,8 @@
 
 @wType @Gadb help@w for more information.
 
-1.044
-Added fake shortname for "From The Wolf Administration" zone.
+1.045
+Changed plugin sequence to -100, so it's guaranteed to run before AKM etc.
 ]]>
 </description>
 
