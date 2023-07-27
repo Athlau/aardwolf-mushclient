@@ -2923,6 +2923,7 @@ adbAreaNameXref = {
     ["Fellchantry"] = "chantry",
     ["Sea King's Dominion"] = "seaking",
     ["Transcendence"] = "transcend",
+    ["Svrogan's Logging Camp"] = "logging",
     -- It's an old zone which no longer exists, but most items seems to be in kerofk.
     ["Midgaard"] = "kerofk",
     -- Aardwords items
@@ -4854,6 +4855,8 @@ Aench no longer attempts to disenchant items if not used by enchanter.
 Added fake shortname for "From The Wolf Administration" zone.
 1.045
 Changed plugin sequence to -100, so it's guaranteed to run before AKM etc.
+1.046
+Add Svrogan's Logging Camp zone.
 @R-----------------------------------------------------------------------------------------------
   ]]
 }

@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2023-01-02 16:37:58"
    requires="5.07"
-   version="1.045"
+   version="1.046"
    sequence="-100"
    >
 <description trim="y">
@@ -39,8 +39,8 @@
 
 @wType @Gadb help@w for more information.
 
-1.045
-Changed plugin sequence to -100, so it's guaranteed to run before AKM etc.
+1.046
+Add Svrogan's Logging Camp zone.
 ]]>
 </description>
 
