@@ -15,7 +15,7 @@
    save_state="y"
    date_written="2022-12-11 14:58:25"
    requires="5.07"
-   version="1.01"
+   version="1.02"
    >
 
 </plugin>
@@ -119,11 +119,15 @@ help_message = [[
    I'm so lazy to write the help...
    Use one of:
    exit_to <name>
+   exit_to <vnum>
    maze_to <room number>
    minimap_to [xXxXx]
 
    exit_to example:
    In [15973] mapper cexit exit_to Before the Grand Gates of Castle Vlad-Shamir;;wait(0.3)
+
+   another exit_to example:
+   In [15002] mapper cexit wait(0.1);;exit_to 15003;;wait(0.1)
 
    maze_to example:
    In [19648] The Skullgore Plain, mapper cexit wait(0.5);;maze_to 19652;;wait(30)
@@ -240,6 +244,15 @@ end
 
 function ExitTo(name, line, wildcards)
   target_exit  = wildcards[1]
+  if tonumber(target_exit) ~= nil then
+    for k, v in pairs(gmcp("room.info.exits")) do
+      if v == target_exit then
+        Execute(k)
+        return
+      end
+    end
+    print("not found!")
+  end
   Execute("exits")
 end
 
@@ -267,10 +280,12 @@ function DoMove()
   SendNoEcho("echo {mazeto_moved}")
 end
 
+local same_room_cnt = 0
 function MazeToMoved(msg, id, name, text)
   if solving_maze then
     local roomid = gmcp("room.info.num")
     if roomid == target_maze_room then
+      same_room_cnt = 0
       Note("Arrived to target room "..tostring(target_maze_room))
       solving_maze = false
       EnableTriggerGroup("mazeto", 0)
@@ -280,13 +295,21 @@ function MazeToMoved(msg, id, name, text)
       maze_to_no_resume_once = false
     else
       if last_room ~= roomid then
+        same_room_cnt = 0
         Note("in room "..roomid.." continuing")
         last_room = roomid
         DoMove()
       else
-        Note("Still in room "..roomid.." looks like maze_to failed!")
-        solving_maze = false
-        EnableTriggerGroup("mazeto", 0)
+        same_room_cnt = same_room_cnt + 1
+        -- can have multiple exits leading back to this room
+        if same_room_cnt >= 6 then
+          Note("Still in room "..roomid.." looks like maze_to failed!")
+          solving_maze = false
+          EnableTriggerGroup("mazeto", 0)
+        else
+          Note("in room "..roomid.." "..tostring(same_room_cnt).." time(s) continuing")
+          DoMove()
+        end
       end
     end
   end
